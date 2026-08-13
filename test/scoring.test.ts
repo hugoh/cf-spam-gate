@@ -1,0 +1,171 @@
+import { describe, expect, it } from "vitest";
+import {
+  combineScores,
+  contentScore,
+  dnsblScore,
+  headerScore,
+  isSpam,
+  urlScore,
+} from "../src/scoring";
+
+describe("contentScore", () => {
+  // naivebayes.probabilities() returns *log* probabilities (large negative
+  // numbers), not linear values in [0,1] — these fixtures reflect that.
+  it("is close to 1 when the spam log-probability is much higher (less negative) than ham's", () => {
+    const classifier = {
+      probabilities: () => [
+        { category: "spam", probability: -10 },
+        { category: "ham", probability: -50 },
+      ],
+    };
+    expect(contentScore(classifier, "buy now")).toBeCloseTo(1, 5);
+  });
+
+  it("is close to 0 when the ham log-probability is much higher than spam's", () => {
+    const classifier = {
+      probabilities: () => [
+        { category: "spam", probability: -50 },
+        { category: "ham", probability: -10 },
+      ],
+    };
+    expect(contentScore(classifier, "buy now")).toBeCloseTo(0, 5);
+  });
+
+  it("is 0.5 when spam and ham are equally likely", () => {
+    const classifier = {
+      probabilities: () => [
+        { category: "spam", probability: -20 },
+        { category: "ham", probability: -20 },
+      ],
+    };
+    expect(contentScore(classifier, "buy now")).toBeCloseTo(0.5);
+  });
+
+  it("doesn't underflow to NaN on very large-magnitude log-probabilities", () => {
+    const classifier = {
+      probabilities: () => [
+        { category: "spam", probability: -301.67 },
+        { category: "ham", probability: -332.32 },
+      ],
+    };
+    expect(contentScore(classifier, "buy now")).toBeCloseTo(1, 5);
+  });
+
+  it("returns 0.5 (unknown) when the classifier has no data for either category", () => {
+    const classifier = { probabilities: () => [] };
+    expect(contentScore(classifier, "")).toBe(0.5);
+  });
+});
+
+describe("urlScore", () => {
+  it("is 0 for no links", () => {
+    expect(urlScore([], "example.com")).toBe(0);
+  });
+
+  it("is 0 when all links share the sender's domain", () => {
+    expect(
+      urlScore(
+        ["https://example.com/a", "https://example.com/b"],
+        "example.com",
+      ),
+    ).toBe(0);
+  });
+
+  it("increases for links to suspicious/free TLDs", () => {
+    expect(
+      urlScore(["https://free-prize.zip/claim"], "example.com"),
+    ).toBeGreaterThan(0);
+  });
+
+  it("increases for IP-literal links", () => {
+    expect(urlScore(["http://192.0.2.1/login"], "example.com")).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it("increases for punycode/homograph domains", () => {
+    expect(
+      urlScore(["https://xn--pple-43d.com/"], "example.com"),
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("headerScore", () => {
+  it("is 0 for a well-formed, consistent header set", () => {
+    const score = headerScore({
+      date: new Date().toUTCString(),
+      from: "person@example.com",
+      replyTo: "person@example.com",
+      subject: "Weekly update",
+    });
+    expect(score).toBe(0);
+  });
+
+  it("increases when Date is missing", () => {
+    expect(
+      headerScore({ from: "person@example.com", subject: "hi" }),
+    ).toBeGreaterThan(0);
+  });
+
+  it("increases when Reply-To domain differs from From domain", () => {
+    const score = headerScore({
+      date: new Date().toUTCString(),
+      from: "person@example.com",
+      replyTo: "totally-different@other.com",
+      subject: "hi",
+    });
+    expect(score).toBeGreaterThan(0);
+  });
+
+  it("increases for ALL CAPS subjects", () => {
+    const score = headerScore({
+      date: new Date().toUTCString(),
+      from: "person@example.com",
+      subject: "ACT NOW BEFORE ITS TOO LATE",
+    });
+    expect(score).toBeGreaterThan(0);
+  });
+});
+
+describe("dnsblScore", () => {
+  it("is 1 when listed", () => {
+    expect(dnsblScore("listed")).toBe(1);
+  });
+
+  it("is 0 when clean", () => {
+    expect(dnsblScore("clean")).toBe(0);
+  });
+
+  it("is 0 when unknown — absence of evidence isn't evidence of spam", () => {
+    expect(dnsblScore("unknown")).toBe(0);
+  });
+});
+
+describe("combineScores", () => {
+  it("computes the weighted average of the four signals", () => {
+    const score = combineScores(
+      { content: 1, url: 0, header: 0, dnsbl: 0 },
+      { content: 0.5, url: 0.25, header: 0.1, dnsbl: 0.15 },
+    );
+    expect(score).toBeCloseTo(0.5);
+  });
+
+  it("normalizes weights that don't sum to 1", () => {
+    const score = combineScores(
+      { content: 1, url: 1, header: 0, dnsbl: 0 },
+      { content: 1, url: 1, header: 0, dnsbl: 0 },
+    );
+    expect(score).toBeCloseTo(1);
+  });
+});
+
+describe("isSpam", () => {
+  it("is true when the score meets or exceeds the threshold", () => {
+    expect(isSpam(0.5, 0.5)).toBe(true);
+    expect(isSpam(0.6, 0.5)).toBe(true);
+  });
+
+  it("is false when the score is below the threshold", () => {
+    expect(isSpam(0.4, 0.5)).toBe(false);
+  });
+});

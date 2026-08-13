@@ -1,0 +1,55 @@
+amends "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Builtins.pkl"
+import "package://github.com/hugoh/hk-config/releases/download/v1.4.0/hk-config@1.4.0#/base.pkl" as Base
+
+min_hk_version = Base.min_hk_version
+
+local linters = new Mapping<String, Step> {
+    ...Base.base
+    ...Base.renovate
+    ["renovate_config_validator"] = (Base.renovate["renovate_config_validator"]) {
+        glob = List(".renovaterc.json")
+    }
+    ["tsc"] = Builtins.tsc
+    ["tofu_fmt"] = {
+        dir = "tofu"
+        glob = List("*.tf")
+        check = "tofu fmt -check -diff"
+        fix = "tofu fmt"
+    }
+    ["tofu_validate"] = {
+        dir = "tofu"
+        glob = List("*.tf")
+        check = "tofu validate"
+        depends = List("tofu_fmt")
+    }
+}
+
+local pushChecks = new Mapping<String, Step> {
+    ...linters
+    ["vitest"] = {
+        glob = List("src/**/*.ts", "test/**/*.ts")
+        check = "bun run test"
+    }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["commit-msg"] {
+        steps = Base.commit_msg
+    }
+    ["pre-push"] {
+        steps = pushChecks
+    }
+    ["check"] {
+        steps = pushChecks
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+}

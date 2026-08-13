@@ -1,0 +1,29 @@
+name = "cf-spam-gate"
+main = "src/index.ts"
+compatibility_date = "2025-01-10"
+
+# ROUTES maps a protected recipient address to its real forwarding
+# destination(s) and an optional per-recipient spam-threshold override.
+# See README.md for the entry format and how to manage entries.
+#
+# `id` below is this deployment's real KV namespace. If you're deploying
+# your own instance of this worker, run `wrangler kv namespace create
+# ROUTES` and replace it with the id it prints — deploying under a
+# different Cloudflare account with this id unchanged will just fail
+# (you don't own the namespace), not write into someone else's data.
+[[kv_namespaces]]
+binding = "ROUTES"
+id = "3e0599865a5e43208b47a669e8294cb1"
+
+[vars]
+# Default spam-score threshold (0-1) when a recipient has no override in ROUTES.
+DEFAULT_THRESHOLD = "0.5"
+# Relative weights for each detection signal; the weighted average is
+# compared against the threshold. Must be valid JSON.
+SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15}"
+# Message returned to the sending MTA when a message is rejected as spam.
+REJECT_MESSAGE = "Message rejected as spam"
+
+# Optional: a free Spamhaus DQS key enables the DNSBL signal (best-effort —
+# see README). Without it, that signal is skipped, not scored as spam.
+# Set with: wrangler secret put SPAMHAUS_DQS_KEY
