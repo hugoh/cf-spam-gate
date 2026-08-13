@@ -1,0 +1,6 @@
+# rumdl configuration file
+
+[MD013]
+# README has long unwrapped prose lines and an ASCII architecture diagram —
+# hard-wrapping either would hurt readability more than it helps.
+enabled = false

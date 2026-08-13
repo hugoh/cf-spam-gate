@@ -100,7 +100,7 @@ bunx wrangler dev    # local dev server against a real KV binding
 
 ## How it works
 
-```
+```text
 Cloudflare Email Routing (per address, via the tofu/ module)
         │  action: type = "worker"
         ▼
