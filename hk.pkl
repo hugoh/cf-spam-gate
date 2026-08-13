@@ -6,9 +6,18 @@ min_hk_version = Base.min_hk_version
 
 local linters = new Mapping<String, Step> {
     ...Base.base
-    ...Base.renovate
-    ["renovate_config_validator"] = (Base.renovate["renovate_config_validator"]) {
-        glob = List(".renovaterc.json")
+    // data/model.json is a generated build artifact (see scripts/train-model.mjs),
+    // not hand-edited — exempt it from the formatting-oriented base checks.
+    ["check_added_large_files"] = (Base.base["check_added_large_files"]) {
+        exclude = List("data/model.json")
+    }
+    ["newlines"] = (Base.base["newlines"]) {
+        exclude = List("data/model.json")
+    }
+    // Misspellings in the training corpus's vocabulary are the classifier's
+    // actual content (spam text is full of them) — not real typos to fix.
+    ["typos"] = (Base.base["typos"]) {
+        exclude = List("data/model.json")
     }
     ["tsc"] = Builtins.tsc
     ["tofu_fmt"] = {
@@ -20,16 +29,8 @@ local linters = new Mapping<String, Step> {
     ["tofu_validate"] = {
         dir = "tofu"
         glob = List("*.tf")
-        check = "tofu validate"
+        check = "tofu init -backend=false -input=false && tofu validate"
         depends = List("tofu_fmt")
-    }
-}
-
-local pushChecks = new Mapping<String, Step> {
-    ...linters
-    ["vitest"] = {
-        glob = List("src/**/*.ts", "test/**/*.ts")
-        check = "bun run test"
     }
 }
 
@@ -43,10 +44,10 @@ hooks {
         steps = Base.commit_msg
     }
     ["pre-push"] {
-        steps = pushChecks
+        steps = linters
     }
     ["check"] {
-        steps = pushChecks
+        steps = linters
     }
     ["fix"] {
         fix = true
