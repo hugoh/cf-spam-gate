@@ -184,7 +184,16 @@ export default {
     }
 
     for (const destination of route.destinations) {
-      await message.forward(destination);
+      try {
+        await message.forward(destination);
+      } catch (error) {
+        // Uncaught here means Cloudflare reports a *temporary* failure to the sender, who keeps retrying forever.
+        console.error(
+          `Forward to ${destination} failed, rejecting instead: ${error}`,
+        );
+        message.setReject(env.REJECT_MESSAGE);
+        return;
+      }
     }
   },
 

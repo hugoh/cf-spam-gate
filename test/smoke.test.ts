@@ -120,6 +120,39 @@ describe("smoke test", () => {
     logSpy.mockRestore();
   });
 
+  it("rejects (rather than retrying) when the destination bounces the forward", async () => {
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    message.forward = vi.fn(async () => {
+      throw new Error("destination rejected: 550 mailbox unavailable");
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await worker.email(message, env);
+
+    expect(message.forward).toHaveBeenCalledWith("real@elsewhere.example");
+    expect(message.setReject).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   it("rejects mail to a recipient with no ROUTES entry", async () => {
     const raw = [
       "From: friend@elsewhere.example",
