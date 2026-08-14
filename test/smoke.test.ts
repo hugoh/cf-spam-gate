@@ -174,6 +174,14 @@ describe("smoke test", () => {
       envWithoutStats,
     );
     expect(response.status).toBe(404);
+
+    for (const path of ["/stats.json", "/stats.html"]) {
+      const res = await worker.fetch(
+        new Request(`https://worker.example${path}`),
+        envWithoutStats,
+      );
+      expect(res.status).toBe(404);
+    }
   });
 
   it("records stats and serves them at /stats when STATS_ENABLED is true", async () => {
@@ -222,11 +230,28 @@ describe("smoke test", () => {
       envWithStats,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
+    const expectedJson = {
       granularity: "hour",
       buckets: [
         { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
       ],
-    });
+    };
+    expect(await response.json()).toEqual(expectedJson);
+
+    const jsonAlias = await worker.fetch(
+      new Request("https://worker.example/stats.json?granularity=hour"),
+      envWithStats,
+    );
+    expect(jsonAlias.status).toBe(200);
+    expect(await jsonAlias.json()).toEqual(expectedJson);
+
+    const htmlResponse = await worker.fetch(
+      new Request("https://worker.example/stats.html?granularity=hour"),
+      envWithStats,
+    );
+    expect(htmlResponse.status).toBe(200);
+    expect(htmlResponse.headers.get("content-type")).toMatch(/text\/html/);
+    const html = await htmlResponse.text();
+    expect(html).toContain("2026-08-14T09");
   });
 });

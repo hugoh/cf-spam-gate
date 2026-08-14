@@ -24,6 +24,7 @@ import {
   urlScore,
 } from "./scoring";
 import { StatsCounter } from "./stats-do";
+import { renderStatsPage } from "./stats-page";
 
 export { StatsCounter };
 
@@ -189,8 +190,10 @@ export default {
 
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const isJson = url.pathname === "/stats" || url.pathname === "/stats.json";
+    const isHtml = url.pathname === "/stats.html";
 
-    if (!isStatsEnabled(env) || url.pathname !== "/stats") {
+    if (!isStatsEnabled(env) || !(isJson || isHtml)) {
       return new Response("Not found", { status: 404 });
     }
 
@@ -205,6 +208,12 @@ export default {
 
     const stats = env.STATS.get(env.STATS.idFromName("stats"));
     const buckets = await stats.getStats(granularity, limit);
+
+    if (isHtml) {
+      return new Response(renderStatsPage(granularity, buckets), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
 
     return Response.json({ granularity, buckets });
   },
