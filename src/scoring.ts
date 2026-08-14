@@ -146,7 +146,7 @@ export interface Scores {
   pii: number;
 }
 
-const SCORE_KEYS: Array<keyof Scores> = [
+export const SCORE_KEYS: Array<keyof Scores> = [
   "content",
   "url",
   "header",

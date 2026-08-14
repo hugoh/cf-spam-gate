@@ -23,6 +23,9 @@ import {
   type Scores,
   urlScore,
 } from "./scoring";
+import { StatsCounter } from "./stats-do";
+
+export { StatsCounter };
 
 export interface Env {
   ROUTES: KVNamespace;
@@ -36,6 +39,26 @@ export interface Env {
   DANGEROUS_EXTENSIONS?: string;
   MACRO_EXTENSIONS?: string;
   OOXML_ZIP_EXTENSIONS?: string;
+  /** Lightweight usage-stats Durable Object. Only used when STATS_ENABLED is "true". */
+  STATS?: DurableObjectNamespace<StatsCounter>;
+  /** "true" to collect stats and serve them at GET /stats; anything else (including unset) disables the feature entirely. */
+  STATS_ENABLED?: string;
+  /** How many days of hourly / daily stats buckets to keep before pruning. */
+  STATS_HOUR_RETENTION_DAYS?: string;
+  STATS_DAY_RETENTION_DAYS?: string;
+}
+
+function isStatsEnabled(
+  env: Env,
+): env is Env & { STATS: DurableObjectNamespace<StatsCounter> } {
+  return env.STATS_ENABLED === "true" && env.STATS !== undefined;
+}
+
+function statsRetention(env: Env) {
+  return {
+    hour: Number(env.STATS_HOUR_RETENTION_DAYS ?? "30"),
+    day: Number(env.STATS_DAY_RETENTION_DAYS ?? "400"),
+  };
 }
 
 /** Parses an optional JSON-array env var into a Set, falling back to `fallback` when unset or malformed. */
@@ -139,6 +162,21 @@ export default {
       }),
     );
 
+    if (isStatsEnabled(env)) {
+      try {
+        const stats = env.STATS.get(env.STATS.idFromName("stats"));
+        await stats.recordEvent(
+          scores,
+          spam,
+          new Date().toISOString(),
+          statsRetention(env),
+        );
+      } catch (error) {
+        // Stats collection is best-effort — never let it block mail delivery.
+        console.error(`Failed to record stats: ${error}`);
+      }
+    }
+
     if (spam) {
       message.setReject(env.REJECT_MESSAGE);
       return;
@@ -147,5 +185,27 @@ export default {
     for (const destination of route.destinations) {
       await message.forward(destination);
     }
+  },
+
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (!isStatsEnabled(env) || url.pathname !== "/stats") {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const granularity =
+      url.searchParams.get("granularity") === "day" ? "day" : "hour";
+    const requestedLimit = Number(url.searchParams.get("limit"));
+    const defaultLimit = granularity === "hour" ? 48 : 90;
+    const limit =
+      Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 500)
+        : defaultLimit;
+
+    const stats = env.STATS.get(env.STATS.idFromName("stats"));
+    const buckets = await stats.getStats(granularity, limit);
+
+    return Response.json({ granularity, buckets });
   },
 };

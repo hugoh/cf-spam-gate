@@ -140,4 +140,93 @@ describe("smoke test", () => {
     expect(message.setReject).toHaveBeenCalledWith("Recipient not configured");
     expect(message.forward).not.toHaveBeenCalled();
   });
+
+  it("does not touch STATS when STATS_ENABLED is unset, and /stats 404s", async () => {
+    const statsGet = vi.fn();
+    const envWithoutStats: Env = {
+      ...env,
+      STATS: { get: statsGet } as unknown as Env["STATS"],
+    };
+
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithoutStats);
+
+    expect(statsGet).not.toHaveBeenCalled();
+
+    const response = await worker.fetch(
+      new Request("https://worker.example/stats"),
+      envWithoutStats,
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it("records stats and serves them at /stats when STATS_ENABLED is true", async () => {
+    const recordEvent = vi.fn();
+    const getStats = vi.fn(async () => [
+      { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
+    ]);
+    const stub = { recordEvent, getStats };
+    const envWithStats: Env = {
+      ...env,
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => stub),
+      } as unknown as Env["STATS"],
+    };
+
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithStats);
+
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      false,
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
+
+    const response = await worker.fetch(
+      new Request("https://worker.example/stats?granularity=hour"),
+      envWithStats,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      granularity: "hour",
+      buckets: [
+        { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
+      ],
+    });
+  });
 });
