@@ -15,6 +15,26 @@ compatibility_date = "2025-01-10"
 binding = "ROUTES"
 id = "3e0599865a5e43208b47a669e8294cb1"
 
+# STATS is a SQLite-backed Durable Object holding lightweight RRD-style
+# usage counters (see STATS_ENABLED below), exposed read-only over HTTP at
+# GET /stats. No Terraform/manual provisioning needed — `wrangler deploy`
+# creates the namespace from the migration below.
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "StatsCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["StatsCounter"]
+
+# Custom route so GET /stats has a fixed hostname that Cloudflare Access can
+# protect (see the terraform-managed cloudflare_zero_trust_access_application
+# "spam_gate_stats" and DNS record in the iac repo). Mail delivery (the
+# `email()` handler) doesn't go through this route -- only fetch() does.
+[[routes]]
+pattern = "spam-gate-stats.larve.net/*"
+zone_name = "larve.net"
+
 [observability]
 enabled = true
 
@@ -26,6 +46,17 @@ DEFAULT_THRESHOLD = "0.5"
 SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15,\"attachment\":0.2,\"pii\":0.05}"
 # Message returned to the sending MTA when a message is rejected as spam.
 REJECT_MESSAGE = "Message rejected as spam"
+
+# Lightweight usage stats (message counts, spam/forward split, per-signal
+# fire counts) kept as hourly/daily RRD-style buckets and exposed at
+# GET /stats. Off by default — the endpoint 404s and no data is collected
+# until this is "true". Intended to sit behind a Cloudflare Access
+# application on whatever route this worker is deployed to; this repo adds
+# no auth of its own.
+STATS_ENABLED = "true"
+# How many days of hourly / daily stats buckets to keep before pruning.
+STATS_HOUR_RETENTION_DAYS = "30"
+STATS_DAY_RETENTION_DAYS = "400"
 
 # Optional JSON-array overrides for the built-in detection lists below; each
 # falls back to a sane default (see README) when unset or malformed.

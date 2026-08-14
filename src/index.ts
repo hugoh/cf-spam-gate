@@ -23,6 +23,10 @@ import {
   type Scores,
   urlScore,
 } from "./scoring";
+import { type EventOutcome, StatsCounter } from "./stats-do";
+import { renderStatsPage } from "./stats-page";
+
+export { StatsCounter };
 
 export interface Env {
   ROUTES: KVNamespace;
@@ -36,6 +40,26 @@ export interface Env {
   DANGEROUS_EXTENSIONS?: string;
   MACRO_EXTENSIONS?: string;
   OOXML_ZIP_EXTENSIONS?: string;
+  /** Lightweight usage-stats Durable Object. Only used when STATS_ENABLED is "true". */
+  STATS?: DurableObjectNamespace<StatsCounter>;
+  /** "true" to collect stats and serve them at GET /stats; anything else (including unset) disables the feature entirely. */
+  STATS_ENABLED?: string;
+  /** How many days of hourly / daily stats buckets to keep before pruning. */
+  STATS_HOUR_RETENTION_DAYS?: string;
+  STATS_DAY_RETENTION_DAYS?: string;
+}
+
+function isStatsEnabled(
+  env: Env,
+): env is Env & { STATS: DurableObjectNamespace<StatsCounter> } {
+  return env.STATS_ENABLED === "true" && env.STATS !== undefined;
+}
+
+function statsRetention(env: Env) {
+  return {
+    hour: Number(env.STATS_HOUR_RETENTION_DAYS ?? "30"),
+    day: Number(env.STATS_DAY_RETENTION_DAYS ?? "400"),
+  };
 }
 
 /** Parses an optional JSON-array env var into a Set, falling back to `fallback` when unset or malformed. */
@@ -125,6 +149,55 @@ export default {
     const threshold = route.threshold ?? Number(env.DEFAULT_THRESHOLD);
     const spam = isSpam(score, threshold);
 
+    const recordStats = async (outcome: EventOutcome) => {
+      if (!isStatsEnabled(env)) return;
+      try {
+        const stats = env.STATS.get(env.STATS.idFromName("stats"));
+        await stats.recordEvent(
+          scores,
+          outcome,
+          new Date().toISOString(),
+          statsRetention(env),
+        );
+      } catch (error) {
+        // Stats collection is best-effort — never let it block mail delivery.
+        console.error(`Failed to record stats: ${error}`);
+      }
+    };
+
+    if (spam) {
+      console.log(
+        JSON.stringify({
+          to: message.to,
+          from: headerFrom,
+          subject: email.subject,
+          senderIp,
+          dnsblResult,
+          scores,
+          score,
+          threshold,
+          verdict: "reject",
+        }),
+      );
+      await recordStats("spam");
+      message.setReject(env.REJECT_MESSAGE);
+      return;
+    }
+
+    for (const destination of route.destinations) {
+      try {
+        await message.forward(destination);
+      } catch (error) {
+        // Uncaught here means Cloudflare reports a *temporary* failure to the sender, who keeps retrying forever.
+        console.error(
+          `Forward to ${destination} failed, rejecting instead: ${error}`,
+        );
+        await recordStats("failed");
+        message.setReject(env.REJECT_MESSAGE);
+        return;
+      }
+    }
+
     console.log(
       JSON.stringify({
         to: message.to,
@@ -135,17 +208,39 @@ export default {
         scores,
         score,
         threshold,
-        verdict: spam ? "reject" : "forward",
+        verdict: "forward",
       }),
     );
+    await recordStats("forwarded");
+  },
 
-    if (spam) {
-      message.setReject(env.REJECT_MESSAGE);
-      return;
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const isJson = url.pathname === "/stats.json";
+    const isHtml = url.pathname === "/stats" || url.pathname === "/stats.html";
+
+    if (!isStatsEnabled(env) || !(isJson || isHtml)) {
+      return new Response("Not found", { status: 404 });
     }
 
-    for (const destination of route.destinations) {
-      await message.forward(destination);
+    const granularity =
+      url.searchParams.get("granularity") === "day" ? "day" : "hour";
+    const requestedLimit = Number(url.searchParams.get("limit"));
+    const defaultLimit = granularity === "hour" ? 48 : 90;
+    const limit =
+      Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 500)
+        : defaultLimit;
+
+    const stats = env.STATS.get(env.STATS.idFromName("stats"));
+    const buckets = await stats.getStats(granularity, limit);
+
+    if (isHtml) {
+      return new Response(renderStatsPage(granularity, buckets), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     }
+
+    return Response.json({ granularity, buckets });
   },
 };

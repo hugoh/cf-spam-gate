@@ -120,6 +120,54 @@ describe("smoke test", () => {
     logSpy.mockRestore();
   });
 
+  it("rejects (rather than retrying) when the destination bounces the forward", async () => {
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    message.forward = vi.fn(async () => {
+      throw new Error("destination rejected: 550 mailbox unavailable");
+    });
+    const recordEvent = vi.fn();
+    const envWithStats: Env = {
+      ...env,
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => ({ recordEvent })),
+      } as unknown as Env["STATS"],
+    };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await worker.email(message, envWithStats);
+
+    expect(message.forward).toHaveBeenCalledWith("real@elsewhere.example");
+    expect(message.setReject).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      "failed",
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   it("rejects mail to a recipient with no ROUTES entry", async () => {
     const raw = [
       "From: friend@elsewhere.example",
@@ -139,5 +187,129 @@ describe("smoke test", () => {
 
     expect(message.setReject).toHaveBeenCalledWith("Recipient not configured");
     expect(message.forward).not.toHaveBeenCalled();
+  });
+
+  it("does not touch STATS when STATS_ENABLED is unset, and /stats 404s", async () => {
+    const statsGet = vi.fn();
+    const envWithoutStats: Env = {
+      ...env,
+      STATS: { get: statsGet } as unknown as Env["STATS"],
+    };
+
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithoutStats);
+
+    expect(statsGet).not.toHaveBeenCalled();
+
+    const response = await worker.fetch(
+      new Request("https://worker.example/stats"),
+      envWithoutStats,
+    );
+    expect(response.status).toBe(404);
+
+    for (const path of ["/stats.json", "/stats.html"]) {
+      const res = await worker.fetch(
+        new Request(`https://worker.example${path}`),
+        envWithoutStats,
+      );
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it("records stats and serves them at /stats(.html|.json) when STATS_ENABLED is true", async () => {
+    const recordEvent = vi.fn();
+    const getStats = vi.fn(async () => [
+      {
+        key: "2026-08-14T09",
+        total: 1,
+        spam: 0,
+        forwarded: 1,
+        failed: 0,
+        signals: {},
+      },
+    ]);
+    const stub = { recordEvent, getStats };
+    const envWithStats: Env = {
+      ...env,
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => stub),
+      } as unknown as Env["STATS"],
+    };
+
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: you@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "friend@elsewhere.example",
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithStats);
+
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      "forwarded",
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
+
+    const expectedJson = {
+      granularity: "hour",
+      buckets: [
+        {
+          key: "2026-08-14T09",
+          total: 1,
+          spam: 0,
+          forwarded: 1,
+          failed: 0,
+          signals: {},
+        },
+      ],
+    };
+
+    const jsonResponse = await worker.fetch(
+      new Request("https://worker.example/stats.json?granularity=hour"),
+      envWithStats,
+    );
+    expect(jsonResponse.status).toBe(200);
+    expect(await jsonResponse.json()).toEqual(expectedJson);
+
+    for (const path of ["/stats", "/stats.html"]) {
+      const htmlResponse = await worker.fetch(
+        new Request(`https://worker.example${path}?granularity=hour`),
+        envWithStats,
+      );
+      expect(htmlResponse.status).toBe(200);
+      expect(htmlResponse.headers.get("content-type")).toMatch(/text\/html/);
+      const html = await htmlResponse.text();
+      expect(html).toContain("2026-08-14T09");
+    }
   });
 });

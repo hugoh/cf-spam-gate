@@ -86,8 +86,9 @@ dependency.
 | `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`, `attachment`, `pii`) in the combined score. |
 | `REJECT_MESSAGE` | Text returned to the sending MTA when a message is rejected. |
 | `SUSPICIOUS_TLDS`, `DANGEROUS_EXTENSIONS`, `MACRO_EXTENSIONS`, `OOXML_ZIP_EXTENSIONS` | Optional JSON-array overrides for the built-in detection lists (commented out in `wrangler.toml` with their defaults shown); each falls back to a sane default when unset or malformed. |
+| `STATS_ENABLED`, `STATS_HOUR_RETENTION_DAYS`, `STATS_DAY_RETENTION_DAYS` | Optional usage-stats collection — see [step 5](#5-usage-stats-optional). |
 
-`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the six expected keys as non-negative numbers, and that any of the four list overrides above are JSON arrays of strings — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
+`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the six expected keys as non-negative numbers, that any of the four list overrides above are JSON arrays of strings, and that `STATS_ENABLED`/`STATS_HOUR_RETENTION_DAYS`/`STATS_DAY_RETENTION_DAYS` (if set) are well-formed — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
 
 Optionally enable the DNSBL signal by setting a free [Spamhaus DQS](https://www.spamhaus.org/free-trial/sign-up-for-a-free-data-query-service-account/) key:
 
@@ -97,7 +98,41 @@ bunx wrangler secret put SPAMHAUS_DQS_KEY
 
 Without a key, that signal is simply skipped (scored neutral, not "spam") — nothing breaks.
 
-### 5. Retraining the content classifier
+### 5. Usage stats (optional)
+
+Set `STATS_ENABLED = "true"` in `wrangler.toml`'s `[vars]` (default `"false"`) to
+collect lightweight RRD-style usage counters — message volume, spam/forward
+split, and which detection signals fired — in a SQLite-backed Durable Object,
+and expose them read-only, both as an HTML page and as JSON:
+
+- `GET /stats` or `/stats.html?granularity=hour|day&limit=N` — a small HTML
+  table of the data, for glancing at in a browser.
+- `GET /stats.json?granularity=hour|day&limit=N` — the same data as raw JSON.
+
+When disabled (the default), no data is collected and all three paths 404.
+
+`STATS_HOUR_RETENTION_DAYS` / `STATS_DAY_RETENTION_DAYS` (defaults `30` /
+`400`) control how long hourly vs. daily buckets are kept before being
+pruned — pruning happens inline on each write, not via a scheduled job, so
+storage stays bounded without any extra Cloudflare product.
+
+No `wrangler kv namespace create` step is needed for this — unlike `ROUTES`,
+the Durable Object's storage is provisioned automatically by `wrangler
+deploy` from the `[[migrations]]` block already in `wrangler.toml`.
+
+**This repo adds no authentication to `/stats`.** If you enable it, put a
+[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+application in front of whatever route the worker is deployed to — that's an
+infrastructure concern for wherever you manage DNS/Access for this worker,
+not something this codebase should own.
+
+**Traffic note:** this is sized for personal/low-volume mailbox use. A
+single Durable Object instance processes calls serially (one DO = one
+thread), so `recordEvent` writes queue up under concurrent load — a non-issue
+at personal-mailbox volume, but this design would need sharding across
+multiple DO instances to hold up under high-throughput deployments.
+
+### 6. Retraining the content classifier
 
 Manual only — there's no scheduled retrain workflow. The training corpus (Enron-Spam) is a fixed historical dataset that isn't updated upstream, so retraining on a timer would just reproduce the same model every time. Retrain when you change `scripts/train-model.config.mjs` (corpus URL, vocabulary size, or the stopword list) or want to pick up an update to the corpus source itself:
 

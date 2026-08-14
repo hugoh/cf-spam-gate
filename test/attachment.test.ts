@@ -97,4 +97,11 @@ describe("attachmentScore", () => {
     ]);
     expect(score).toBe(1);
   });
+
+  it("does not blow the call stack with a very large number of attachments", () => {
+    const attachments = Array.from({ length: 200_000 }, () =>
+      attachment("invoice.pdf", "application/pdf"),
+    );
+    expect(attachmentScore(attachments)).toBe(0);
+  });
 });

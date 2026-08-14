@@ -66,4 +66,35 @@ describe("validateVars", () => {
     });
     expect(errors).toHaveLength(2);
   });
+
+  it("is valid when STATS_ENABLED and retention vars are well-formed", () => {
+    expect(
+      validateVars({
+        SIGNAL_WEIGHTS: validWeights,
+        STATS_ENABLED: "true",
+        STATS_HOUR_RETENTION_DAYS: "30",
+        STATS_DAY_RETENTION_DAYS: "400",
+      }),
+    ).toEqual([]);
+  });
+
+  it('errors when STATS_ENABLED isn\'t "true" or "false"', () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      STATS_ENABLED: "yes",
+    });
+    expect(errors).toEqual(['STATS_ENABLED must be "true" or "false".']);
+  });
+
+  it("errors when a stats retention var isn't a positive integer", () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      STATS_HOUR_RETENTION_DAYS: "0",
+      STATS_DAY_RETENTION_DAYS: "abc",
+    });
+    expect(errors).toEqual([
+      "STATS_HOUR_RETENTION_DAYS must be a positive integer.",
+      "STATS_DAY_RETENTION_DAYS must be a positive integer.",
+    ]);
+  });
 });

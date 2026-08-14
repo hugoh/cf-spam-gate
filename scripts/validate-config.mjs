@@ -59,6 +59,22 @@ export function validateVars(vars) {
     }
   }
 
+  if (
+    vars.STATS_ENABLED !== undefined &&
+    vars.STATS_ENABLED !== "true" &&
+    vars.STATS_ENABLED !== "false"
+  ) {
+    errors.push('STATS_ENABLED must be "true" or "false".');
+  }
+
+  for (const name of ["STATS_HOUR_RETENTION_DAYS", "STATS_DAY_RETENTION_DAYS"]) {
+    const raw = vars[name];
+    if (raw === undefined) continue; // optional — falls back to a built-in default
+    if (!/^\d+$/.test(raw) || Number(raw) <= 0) {
+      errors.push(`${name} must be a positive integer.`);
+    }
+  }
+
   return errors;
 }
 

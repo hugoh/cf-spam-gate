@@ -93,9 +93,12 @@ export function attachmentScore(
   const ooxmlZipExtensions =
     config.ooxmlZipExtensions ?? DEFAULT_OOXML_ZIP_EXTENSIONS;
 
-  return Math.max(
-    ...attachments.map((a) =>
-      scoreOne(a, dangerousExtensions, macroExtensions, ooxmlZipExtensions),
-    ),
+  return attachments.reduce(
+    (max, a) =>
+      Math.max(
+        max,
+        scoreOne(a, dangerousExtensions, macroExtensions, ooxmlZipExtensions),
+      ),
+    0,
   );
 }
