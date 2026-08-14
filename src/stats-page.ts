@@ -27,6 +27,10 @@ export function renderStatsPage(
   buckets: StatsBucket[],
 ): string {
   const otherGranularity = granularity === "hour" ? "day" : "hour";
+  const granularityLabel: Record<"hour" | "day", string> = {
+    hour: "hourly",
+    day: "daily",
+  };
   // Passed as an array (not joined into one string) so html-template-tag
   // treats each row as already-safe markup instead of re-escaping it.
   const rows =
@@ -90,10 +94,10 @@ export function renderStatsPage(
         </style>
       </head>
       <body>
-        <h1>cf-spam-gate stats — ${granularity}ly</h1>
+        <h1>cf-spam-gate stats — ${granularityLabel[granularity]}</h1>
         <nav>
           <a href="?granularity=${otherGranularity}"
-            >view ${otherGranularity}ly</a
+            >view ${granularityLabel[otherGranularity]}</a
           >
           <a href="/stats.json?granularity=${granularity}">raw JSON</a>
         </nav>
