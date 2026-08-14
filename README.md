@@ -96,11 +96,13 @@ Without a key, that signal is simply skipped (scored neutral, not "spam") — no
 
 ### 5. Retraining the content classifier
 
-The bundled classifier is retrained automatically once a month (`.github/workflows/retrain.yml`), which opens a PR with the updated `data/model.json` if it changed — review and merge like any other PR. To retrain manually:
+Manual only — there's no scheduled retrain workflow. The training corpus (Enron-Spam) is a fixed historical dataset that isn't updated upstream, so retraining on a timer would just reproduce the same model every time. Retrain when you change `scripts/train-model.config.mjs` (corpus URL, vocabulary size, or the stopword list) or want to pick up an update to the corpus source itself:
 
 ```sh
 bun run train-model
 ```
+
+Takes a few seconds — training itself is fast; most of the time is the ~15MB corpus download. Writes both `data/model.json` (the bundled model) and `data/model.meta.json` (when it was trained, from what corpus, with what settings — see `scripts/train-model.mjs`'s `buildMeta`).
 
 ### Local development
 
@@ -150,7 +152,7 @@ Those three are exactly what this worker adds.
 
 ### Detection signals
 
-- **Content** (`@ladjs/naivebayes`) — a Bayesian classifier trained offline (`scripts/train-model.mjs`) on a public labeled ham/spam corpus and bundled as a JSON asset. Not retrained at request time; see "Retraining" above.
+- **Content** (`@ladjs/naivebayes`) — a Bayesian classifier trained offline (`scripts/train-model.mjs`) on the [Enron-Spam corpus](https://github.com/MWiechmann/enron_spam_data) (real email, not the SMS-only corpora commonly used for this) and bundled as a JSON asset. Not retrained at request time; see "Retraining" above. The corpus's ham class is Enron's own internal email, so company-identifying tokens (`enron*`, `ect`, `hou`) are stripped before training — see `stripCorpusArtifacts` in `scripts/train-model.mjs`.
 - **URL/domain** (`tldts`) — suspicious/free TLDs, IP-literal links, punycode/homograph domains, and sender-vs-link domain mismatches.
 - **Header heuristics** — hand-written checks: missing/malformed `Date`, `Reply-To`/`From` domain mismatch, shouting subjects.
 - **DNSBL** (optional) — checks the connecting client's IP (best-effort, extracted from the topmost `Received:` header — Workers' `email()` handler doesn't expose the SMTP connection IP directly) against Spamhaus via their [Data Query Service](https://www.spamhaus.org/resource-hub/email-security/if-you-query-the-legacy-dnsbls-via-cloudflares-dns-move-to-spamhaus-technologys-free-data-query-service/). DQS is used instead of the legacy public `zen.spamhaus.org` zone because Spamhaus silently returns "not listed" for anything queried through a major public resolver (Cloudflare's own 1.1.1.1 included) — DQS ties authorization to a registered key instead, so it works reliably from a Worker. Reversed-name construction (for both IPv4 and IPv6) uses the `ip-ptr` package. Failure or absence of a usable IP scores neutral, never as spam evidence.
@@ -168,4 +170,4 @@ We also evaluated the `dnsbl` npm package for the DNSBL signal — it depends on
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+GPLv3 — see [LICENSE](./LICENSE). (Chosen because the bundled training corpus, [Enron-Spam via MWiechmann/enron_spam_data](https://github.com/MWiechmann/enron_spam_data), is GPLv3-licensed; keeping this repo under the same license avoids any ambiguity about training on it.)

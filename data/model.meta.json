@@ -1,0 +1,9 @@
+{
+  "trainedAt": "2026-08-14T03:20:21.912Z",
+  "corpusUrl": "https://raw.githubusercontent.com/MWiechmann/enron_spam_data/master/enron_spam_data.zip",
+  "corpusSha256": "e994ad3c09fd7528b397e1f921742da5dd59f19695bc25cdb3617eb3ded17634",
+  "vocabularyLimit": 30000,
+  "messageCount": 33665,
+  "spamCount": 17120,
+  "hamCount": 16545
+}

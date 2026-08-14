@@ -1,5 +1,4 @@
 amends "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Builtins.pkl"
 import "package://github.com/hugoh/hk-config/releases/download/v1.4.0/hk-config@1.4.0#/base.pkl" as Base
 
 min_hk_version = Base.min_hk_version
@@ -19,7 +18,13 @@ local linters = new Mapping<String, Step> {
     ["typos"] = (Base.base["typos"]) {
         exclude = List("data/model.json")
     }
-    ["tsc"] = Builtins.tsc
+    // Run via bun (the project's own typescript devDependency) rather than
+    // Builtins.tsc's mise-managed global tsc — one fewer place to keep the
+    // TypeScript version in sync.
+    ["tsc"] = {
+        glob = List("**/*.ts")
+        check = "bun run typecheck"
+    }
 }
 
 hooks {
