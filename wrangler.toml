@@ -53,7 +53,7 @@ REJECT_MESSAGE = "Message rejected as spam"
 # until this is "true". Intended to sit behind a Cloudflare Access
 # application on whatever route this worker is deployed to; this repo adds
 # no auth of its own.
-STATS_ENABLED = "false"
+STATS_ENABLED = "true"
 # How many days of hourly / daily stats buckets to keep before pruning.
 STATS_HOUR_RETENTION_DAYS = "30"
 STATS_DAY_RETENTION_DAYS = "400"
