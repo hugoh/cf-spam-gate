@@ -20,18 +20,6 @@ local linters = new Mapping<String, Step> {
         exclude = List("data/model.json")
     }
     ["tsc"] = Builtins.tsc
-    ["tofu_fmt"] = {
-        dir = "tofu"
-        glob = List("*.tf")
-        check = "tofu fmt -check -diff"
-        fix = "tofu fmt"
-    }
-    ["tofu_validate"] = {
-        dir = "tofu"
-        glob = List("*.tf")
-        check = "tofu init -backend=false -input=false && tofu validate"
-        depends = List("tofu_fmt")
-    }
 }
 
 hooks {
