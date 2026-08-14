@@ -1,19 +1,6 @@
-const CANDIDATE_RE = /\b(?:\d[ -]?){13,19}\b/g;
+import luhnValid from "fast-luhn";
 
-function luhnValid(digits: string): boolean {
-  let sum = 0;
-  let alternate = false;
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let n = Number(digits[i]);
-    if (alternate) {
-      n *= 2;
-      if (n > 9) n -= 9;
-    }
-    sum += n;
-    alternate = !alternate;
-  }
-  return sum % 10 === 0;
-}
+const CANDIDATE_RE = /\b(?:\d[ -]?){13,19}\b/g;
 
 /** PII/credit-card detection: flags text containing a Luhn-valid card-number-shaped digit sequence. */
 export function piiScore(text: string): number {
