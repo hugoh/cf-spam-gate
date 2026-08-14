@@ -27,6 +27,14 @@ class_name = "StatsCounter"
 tag = "v1"
 new_sqlite_classes = ["StatsCounter"]
 
+# Custom route so GET /stats has a fixed hostname that Cloudflare Access can
+# protect (see the terraform-managed cloudflare_zero_trust_access_application
+# "spam_gate_stats" and DNS record in the iac repo). Mail delivery (the
+# `email()` handler) doesn't go through this route -- only fetch() does.
+[[routes]]
+pattern = "spam-gate-stats.larve.net/*"
+zone_name = "larve.net"
+
 [observability]
 enabled = true
 
