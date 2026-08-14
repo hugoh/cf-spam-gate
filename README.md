@@ -19,9 +19,10 @@ In production, deployment is automated: pushing to `main` runs the test suite an
 ### 2. Protect an address
 
 Each protected recipient needs one entry in the `ROUTES` KV namespace, keyed by
-the address itself. If you're wiring the address up via the OpenTofu module
-(step 3), it creates this entry for you — skip ahead. This manual form is for
-quick testing, or for addresses managed some other way:
+the address itself. If you're wiring the address up via the
+[terraform-cloudflare-spam-gate](https://github.com/hugoh/terraform-cloudflare-spam-gate)
+OpenTofu module (step 3), it creates this entry for you — skip ahead. This
+manual form is for quick testing, or for addresses managed some other way:
 
 ```sh
 bunx wrangler kv key put --binding=ROUTES "you@example.com" \
@@ -35,10 +36,13 @@ An address with no `ROUTES` entry is rejected outright rather than silently gues
 
 ### 3. Point Cloudflare Email Routing at the worker
 
-Use the OpenTofu module in `tofu/` instead of a plain forwarding rule. It creates
-**both** the routing rule and the recipient's `ROUTES` KV entry (step 2 above) —
-so for any address managed this way, you don't need the manual `wrangler kv`
-command separately; the module is the source of truth.
+Use the
+[terraform-cloudflare-spam-gate](https://github.com/hugoh/terraform-cloudflare-spam-gate)
+OpenTofu module instead of a plain forwarding rule. It creates **both** the
+routing rule and the recipient's `ROUTES` KV entry (step 2 above) — so for any
+address managed this way, you don't need the manual `wrangler kv` command
+separately; the module is the source of truth. It's also published on the
+[OpenTofu Registry](https://registry.opentofu.org).
 
 ```hcl
 resource "cloudflare_email_routing_settings" "example" {
@@ -46,7 +50,7 @@ resource "cloudflare_email_routing_settings" "example" {
 }
 
 module "spam_gate_contact" {
-  source              = "github.com/hugoh/cf-spam-gate//tofu?ref=v1.0.0"
+  source              = "github.com/hugoh/terraform-cloudflare-spam-gate?ref=v0.1.0"
   zone_id             = cloudflare_zone.example.id
   from                = "contact@example.com"
   worker_script_name  = "cf-spam-gate" # must match `name` in wrangler.toml
@@ -58,9 +62,19 @@ module "spam_gate_contact" {
 }
 ```
 
-Run with `tofu` (OpenTofu), not `terraform`. This is a self-contained module — reference it directly from any root module, it doesn't depend on anything else in this repo.
+Run with `tofu` (OpenTofu), not `terraform`. It's a separate repo from this
+Worker on purpose — different tooling (pure OpenTofu vs. TypeScript/bun) and
+its own independent release stream, so a Worker release never implies a
+module release or vice versa.
 
-**Pin `?ref=` to a released tag, not `main`.** Without it, `tofu` tracks whatever's on the default branch at plan time — including in-progress changes — so a routine `tofu plan` elsewhere could pick up an unreleased module change unexpectedly. This needs no separate release process for the module itself: `.github/workflows/release.yml` already cuts a semver tag on every merge to `main` (from conventional commit messages), and since the module lives in this same repo, it rides that same tag stream as the worker code — bump the `ref` when you deliberately want a newer module version, same as bumping any other pinned dependency.
+**Pin `?ref=` to a released tag, not `main`.** Without it, `tofu` tracks
+whatever's on that repo's default branch at plan time — including
+in-progress changes — so a routine `tofu plan` elsewhere could pick up an
+unreleased module change unexpectedly. The module repo's own
+`.github/workflows/release.yml` cuts a semver tag on every merge to its
+`main` (from conventional commit messages) — bump the `ref` when you
+deliberately want a newer module version, same as bumping any other pinned
+dependency.
 
 ### 4. Tune detection (optional)
 
@@ -101,7 +115,7 @@ bunx wrangler dev    # local dev server against a real KV binding
 ## How it works
 
 ```text
-Cloudflare Email Routing (per address, via the tofu/ module)
+Cloudflare Email Routing (per address, via terraform-cloudflare-spam-gate)
         │  action: type = "worker"
         ▼
    Worker email() handler
@@ -151,3 +165,7 @@ We also evaluated the `dnsbl` npm package for the DNSBL signal — it depends on
 
 - DNSBL is best-effort: it depends on a `Received:` header actually containing the true connecting IP, which isn't guaranteed for every mail path.
 - No virus/attachment scanning, no NSFW/toxicity detection — those are the TensorFlow/ClamAV features `spamscanner` proper has that this worker intentionally doesn't replicate.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
