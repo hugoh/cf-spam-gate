@@ -40,12 +40,13 @@ const env: Env = {
   }),
   DEFAULT_THRESHOLD: "0.5",
   SIGNAL_WEIGHTS: JSON.stringify({
-    content: 0.5,
-    url: 0.25,
-    header: 0.1,
-    dnsbl: 0.15,
-    attachment: 0.2,
+    content: 0.3,
+    url: 0.15,
+    header: 0.05,
+    dnsbl: 0.1,
+    attachment: 0.1,
     pii: 0.05,
+    auth: 0.25,
   }),
   REJECT_MESSAGE: "Message rejected as spam",
 };
@@ -97,6 +98,7 @@ describe("smoke test", () => {
       "From: Prize Dept <winner@bulk-mailer.spam-host.zip>",
       "To: you@example.com",
       "Reply-To: claim@totally-different-domain.example",
+      "Authentication-Results: mx.cloudflare.net; spf=fail smtp.mailfrom=winner@bulk-mailer.spam-host.zip; dkim=none",
       "Subject: URGENT CLAIM YOUR FREE PRIZE NOW",
       "",
       "CONGRATULATIONS you have WON a FREE PRIZE! Click now to claim: http://192.0.2.99/claim",
@@ -118,6 +120,39 @@ describe("smoke test", () => {
     const logged = JSON.parse(logSpy.mock.calls[0][0] as string);
     expect(logged).toMatchObject({ to: "you@example.com", verdict: "reject" });
     logSpy.mockRestore();
+  });
+
+  it("uses the REJECT_MESSAGES category override for the dominant signal", async () => {
+    const raw = [
+      "Received: from bulk-mailer.spam-host.zip [198.51.100.66] by mx.example.com",
+      "From: Prize Dept <winner@bulk-mailer.spam-host.zip>",
+      "To: you@example.com",
+      "Reply-To: claim@totally-different-domain.example",
+      "Authentication-Results: mx.cloudflare.net; spf=fail smtp.mailfrom=winner@bulk-mailer.spam-host.zip; dkim=none",
+      "Subject: URGENT CLAIM YOUR FREE PRIZE NOW",
+      "",
+      "CONGRATULATIONS you have WON a FREE PRIZE! Click now to claim: http://192.0.2.99/claim",
+      "Act now before this offer expires! Free money! Buy now! Limited time!",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "winner@bulk-mailer.spam-host.zip",
+    );
+    const envWithRejectMessages: Env = {
+      ...env,
+      REJECT_MESSAGES: JSON.stringify({
+        content: "Message rejected: looks like bulk/spam content",
+      }),
+    };
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithRejectMessages);
+
+    expect(message.setReject).toHaveBeenCalledWith(
+      "Message rejected: looks like bulk/spam content",
+    );
   });
 
   it("rejects (rather than retrying) when the destination bounces the forward", async () => {

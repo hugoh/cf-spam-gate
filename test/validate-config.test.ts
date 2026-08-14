@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { validateVars } from "../scripts/validate-config.mjs";
 
 const validWeights = JSON.stringify({
-  content: 0.35,
-  url: 0.2,
+  content: 0.3,
+  url: 0.15,
   header: 0.05,
   dnsbl: 0.1,
-  attachment: 0.25,
+  attachment: 0.1,
   pii: 0.05,
+  auth: 0.25,
 });
 
 describe("validateVars", () => {
@@ -65,6 +66,36 @@ describe("validateVars", () => {
       MACRO_EXTENSIONS: "{bad json",
     });
     expect(errors).toHaveLength(2);
+  });
+
+  it("is valid when REJECT_MESSAGES is a JSON object with known category keys", () => {
+    expect(
+      validateVars({
+        SIGNAL_WEIGHTS: validWeights,
+        REJECT_MESSAGES: JSON.stringify({
+          reputation: "Sender is blocklisted.",
+          attachment: "Attachment type not allowed.",
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it("errors when REJECT_MESSAGES has an unknown category key", () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      REJECT_MESSAGES: JSON.stringify({ bogus: "nope" }),
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/REJECT_MESSAGES must be a JSON object/);
+  });
+
+  it("errors when REJECT_MESSAGES isn't valid JSON", () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      REJECT_MESSAGES: "{not json",
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/REJECT_MESSAGES is not valid JSON/);
   });
 
   it("is valid when STATS_ENABLED and retention vars are well-formed", () => {

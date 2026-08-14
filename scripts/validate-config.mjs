@@ -6,7 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { parse as parseToml } from "smol-toml";
-import { isValidScores } from "../src/scoring.ts";
+import { isValidScores, SIGNAL_CATEGORIES } from "../src/scoring.ts";
 
 const LIST_VARS = [
   "SUSPICIOUS_TLDS",
@@ -14,6 +14,8 @@ const LIST_VARS = [
   "MACRO_EXTENSIONS",
   "OOXML_ZIP_EXTENSIONS",
 ];
+
+const SIGNAL_CATEGORY_VALUES = new Set(Object.values(SIGNAL_CATEGORIES));
 
 function parseJsonVar(name, raw) {
   try {
@@ -35,7 +37,7 @@ export function validateVars(vars) {
       if (!isValidScores(weights)) {
         errors.push(
           "SIGNAL_WEIGHTS must have exactly the keys content, url, header, " +
-            "dnsbl, attachment, pii, each a finite number >= 0.",
+            "dnsbl, attachment, pii, auth, each a finite number >= 0.",
         );
       }
     } catch (error) {
@@ -53,6 +55,28 @@ export function validateVars(vars) {
         !values.every((v) => typeof v === "string")
       ) {
         errors.push(`${name} must be a JSON array of strings.`);
+      }
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  if (vars.REJECT_MESSAGES !== undefined) {
+    try {
+      const messages = parseJsonVar("REJECT_MESSAGES", vars.REJECT_MESSAGES);
+      const isValid =
+        typeof messages === "object" &&
+        messages !== null &&
+        !Array.isArray(messages) &&
+        Object.entries(messages).every(
+          ([key, value]) =>
+            SIGNAL_CATEGORY_VALUES.has(key) && typeof value === "string",
+        );
+      if (!isValid) {
+        errors.push(
+          `REJECT_MESSAGES must be a JSON object mapping category names ` +
+            `(${[...SIGNAL_CATEGORY_VALUES].join(", ")}) to string messages.`,
+        );
       }
     } catch (error) {
       errors.push(error.message);

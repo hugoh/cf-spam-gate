@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  authScore,
   combineScores,
   contentScore,
+  DEFAULT_SIGNAL_WEIGHTS,
   dnsblScore,
+  dominantCategory,
   headerScore,
   isSpam,
   isValidScores,
@@ -202,7 +205,15 @@ describe("dnsblScore", () => {
 describe("combineScores", () => {
   it("computes the weighted average of all signals", () => {
     const score = combineScores(
-      { content: 1, url: 0, header: 0, dnsbl: 0, attachment: 0, pii: 0 },
+      {
+        content: 1,
+        url: 0,
+        header: 0,
+        dnsbl: 0,
+        attachment: 0,
+        pii: 0,
+        auth: 0,
+      },
       {
         content: 0.35,
         url: 0.2,
@@ -210,6 +221,7 @@ describe("combineScores", () => {
         dnsbl: 0.1,
         attachment: 0.25,
         pii: 0.05,
+        auth: 0,
       },
     );
     expect(score).toBeCloseTo(0.35);
@@ -217,18 +229,155 @@ describe("combineScores", () => {
 
   it("normalizes weights that don't sum to 1", () => {
     const score = combineScores(
-      { content: 1, url: 1, header: 0, dnsbl: 0, attachment: 0, pii: 0 },
-      { content: 1, url: 1, header: 0, dnsbl: 0, attachment: 0, pii: 0 },
+      {
+        content: 1,
+        url: 1,
+        header: 0,
+        dnsbl: 0,
+        attachment: 0,
+        pii: 0,
+        auth: 0,
+      },
+      {
+        content: 1,
+        url: 1,
+        header: 0,
+        dnsbl: 0,
+        attachment: 0,
+        pii: 0,
+        auth: 0,
+      },
     );
     expect(score).toBeCloseTo(1);
   });
 
   it("weighs a new signal (e.g. attachment) the same as any other", () => {
     const score = combineScores(
-      { content: 0, url: 0, header: 0, dnsbl: 0, attachment: 1, pii: 0 },
-      { content: 0, url: 0, header: 0, dnsbl: 0, attachment: 1, pii: 0 },
+      {
+        content: 0,
+        url: 0,
+        header: 0,
+        dnsbl: 0,
+        attachment: 1,
+        pii: 0,
+        auth: 0,
+      },
+      {
+        content: 0,
+        url: 0,
+        header: 0,
+        dnsbl: 0,
+        attachment: 1,
+        pii: 0,
+        auth: 0,
+      },
     );
     expect(score).toBeCloseTo(1);
+  });
+});
+
+describe("authScore", () => {
+  it("is 0 when both spf and dkim pass", () => {
+    expect(authScore({ spf: "pass", dkim: "pass" })).toBe(0);
+  });
+
+  it("is 0 when results are absent — unknown isn't evidence of spam", () => {
+    expect(authScore({})).toBe(0);
+  });
+
+  it("is higher for a hard fail than a softfail", () => {
+    const softfail = authScore({ spf: "softfail", dkim: "pass" });
+    const fail = authScore({ spf: "fail", dkim: "pass" });
+    expect(fail).toBeGreaterThan(softfail);
+    expect(softfail).toBeGreaterThan(0);
+  });
+
+  it("is 1 when both mechanisms hard-fail", () => {
+    expect(authScore({ spf: "fail", dkim: "fail" })).toBe(1);
+  });
+
+  it("takes the worse of the two mechanisms", () => {
+    expect(authScore({ spf: "pass", dkim: "fail" })).toBe(
+      authScore({ spf: "fail", dkim: "fail" }),
+    );
+  });
+});
+
+describe("dominantCategory", () => {
+  const weights = DEFAULT_SIGNAL_WEIGHTS;
+
+  it("attributes to 'reputation' when dnsbl dominates the weighted score", () => {
+    const scores = {
+      content: 0.2,
+      url: 0.2,
+      header: 0,
+      dnsbl: 1,
+      attachment: 0,
+      pii: 0,
+      auth: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("reputation");
+  });
+
+  it("attributes to 'attachment' when attachment dominates", () => {
+    const scores = {
+      content: 0.1,
+      url: 0.1,
+      header: 0,
+      dnsbl: 0,
+      attachment: 1,
+      pii: 0,
+      auth: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("attachment");
+  });
+
+  it("attributes to 'links' when url dominates", () => {
+    const scores = {
+      content: 0,
+      url: 1,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+      auth: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("links");
+  });
+
+  it("attributes content, header, and pii signals to 'content'", () => {
+    const scores = {
+      content: 1,
+      url: 0,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+      auth: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("content");
+
+    const headerDominant = {
+      content: 0,
+      url: 0,
+      header: 1,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+      auth: 0,
+    };
+    expect(dominantCategory(headerDominant, weights)).toBe("content");
+
+    const piiDominant = {
+      content: 0,
+      url: 0,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 1,
+      auth: 0,
+    };
+    expect(dominantCategory(piiDominant, weights)).toBe("content");
   });
 });
 
@@ -240,6 +389,7 @@ describe("isValidScores", () => {
     dnsbl: 0.1,
     attachment: 0.25,
     pii: 0.05,
+    auth: 0.15,
   };
 
   it("is true for a well-formed Scores object", () => {

@@ -1,5 +1,6 @@
 import remove from "confusables";
 import { parse } from "tldts";
+import type { AuthResults } from "./auth";
 import type { ExtractedLink } from "./links";
 
 // No SPF/DKIM/DMARC scoring here: Cloudflare Email Routing already rejects
@@ -144,6 +145,7 @@ export interface Scores {
   dnsbl: number;
   attachment: number;
   pii: number;
+  auth: number;
 }
 
 export const SCORE_KEYS: Array<keyof Scores> = [
@@ -153,16 +155,53 @@ export const SCORE_KEYS: Array<keyof Scores> = [
   "dnsbl",
   "attachment",
   "pii",
+  "auth",
 ];
 
 export const DEFAULT_SIGNAL_WEIGHTS: Scores = {
-  content: 0.5,
-  url: 0.25,
-  header: 0.1,
-  dnsbl: 0.15,
-  attachment: 0.2,
+  content: 0.3,
+  url: 0.15,
+  header: 0.05,
+  dnsbl: 0.1,
+  attachment: 0.1,
   pii: 0.05,
+  auth: 0.25,
 };
+
+export type SignalCategory = "reputation" | "attachment" | "links" | "content";
+
+export const SIGNAL_CATEGORIES: Record<keyof Scores, SignalCategory> = {
+  dnsbl: "reputation",
+  auth: "reputation",
+  attachment: "attachment",
+  url: "links",
+  content: "content",
+  header: "content",
+  pii: "content",
+};
+
+/**
+ * Coarse category of whichever signal contributed most to the weighted
+ * score — used to pick a reject message that's informative without leaking
+ * exact scores/thresholds to an adversary probing the filter.
+ */
+export function dominantCategory(
+  scores: Scores,
+  weights: Scores,
+): SignalCategory {
+  let best: keyof Scores = SCORE_KEYS[0];
+  let bestContribution = -1;
+
+  for (const key of SCORE_KEYS) {
+    const contribution = scores[key] * weights[key];
+    if (contribution > bestContribution) {
+      bestContribution = contribution;
+      best = key;
+    }
+  }
+
+  return SIGNAL_CATEGORIES[best];
+}
 
 /** True when `value` has exactly the Scores shape: every key present as a finite, non-negative number. */
 export function isValidScores(value: unknown): value is Scores {
@@ -195,4 +234,39 @@ export function dnsblScore(result: "listed" | "clean" | "unknown"): number {
 
 export function isSpam(score: number, threshold: number): boolean {
   return score >= threshold;
+}
+
+/**
+ * Severity of an individual SPF/DKIM verdict from Cloudflare's
+ * Authentication-Results header, on a 0 (pass) to 1 (hard fail) scale.
+ * `neutral`/`none`/`policy` sit below `softfail`, which sits below an
+ * outright `fail` (or a lookup error, which is at least as suspicious as a
+ * hard fail). Anything else unrecognized is treated as a soft signal rather
+ * than ignored outright.
+ */
+const AUTH_SEVERITY: Record<string, number> = {
+  pass: 0,
+  neutral: 0.3,
+  none: 0.3,
+  policy: 0.3,
+  softfail: 0.5,
+  fail: 1,
+  temperror: 1,
+  permerror: 1,
+};
+
+function severityOf(result: string | undefined): number {
+  if (result === undefined) return 0;
+  return AUTH_SEVERITY[result] ?? 0.5;
+}
+
+/**
+ * Cloudflare's Email Routing already gates on SPF-or-DKIM passing before
+ * this worker runs at all (see the note at the top of this file), so a
+ * message reaching here has cleared that bar. This signal picks up the
+ * gap — e.g. a message that passed on DKIM alone while SPF softfailed —
+ * by scoring the worse of the two mechanisms rather than requiring both.
+ */
+export function authScore(results: AuthResults): number {
+  return Math.max(severityOf(results.spf), severityOf(results.dkim));
 }
