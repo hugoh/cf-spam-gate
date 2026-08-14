@@ -44,6 +44,8 @@ const env: Env = {
     url: 0.25,
     header: 0.1,
     dnsbl: 0.15,
+    attachment: 0.2,
+    pii: 0.05,
   }),
   REJECT_MESSAGE: "Message rejected as spam",
 };

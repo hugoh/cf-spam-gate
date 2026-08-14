@@ -15,14 +15,24 @@ compatibility_date = "2025-01-10"
 binding = "ROUTES"
 id = "3e0599865a5e43208b47a669e8294cb1"
 
+[observability]
+enabled = true
+
 [vars]
 # Default spam-score threshold (0-1) when a recipient has no override in ROUTES.
 DEFAULT_THRESHOLD = "0.5"
 # Relative weights for each detection signal; the weighted average is
 # compared against the threshold. Must be valid JSON.
-SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15}"
+SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15,\"attachment\":0.2,\"pii\":0.05}"
 # Message returned to the sending MTA when a message is rejected as spam.
 REJECT_MESSAGE = "Message rejected as spam"
+
+# Optional JSON-array overrides for the built-in detection lists below; each
+# falls back to a sane default (see README) when unset or malformed.
+# SUSPICIOUS_TLDS = "[\"zip\",\"mov\",\"top\",\"xyz\",\"click\",\"link\",\"gq\",\"tk\",\"ml\",\"quest\",\"work\",\"loan\"]"
+# DANGEROUS_EXTENSIONS = "[\"exe\",\"scr\",\"js\",\"vbs\",\"bat\",\"cmd\",\"msi\",\"com\",\"pif\",\"jar\",\"ps1\"]"
+# MACRO_EXTENSIONS = "[\"docm\",\"xlsm\",\"pptm\"]"
+# OOXML_ZIP_EXTENSIONS = "[\"docx\",\"xlsx\",\"pptx\",\"docm\",\"xlsm\",\"pptm\"]"
 
 # Optional: a free Spamhaus DQS key enables the DNSBL signal (best-effort —
 # see README). Without it, that signal is skipped, not scored as spam.

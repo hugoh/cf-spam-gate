@@ -1,15 +1,25 @@
 import PostalMime from "postal-mime";
+import {
+  attachmentScore,
+  DEFAULT_DANGEROUS_EXTENSIONS,
+  DEFAULT_MACRO_EXTENSIONS,
+  DEFAULT_OOXML_ZIP_EXTENSIONS,
+} from "./attachment";
 import { getClassifier } from "./classifier";
 import { checkDnsbl } from "./dnsbl";
 import { extractLinks } from "./links";
+import { piiScore } from "./pii";
 import { extractSenderIp } from "./received-header";
 import { lookupRoute } from "./routing";
 import {
   combineScores,
   contentScore,
+  DEFAULT_SIGNAL_WEIGHTS,
+  DEFAULT_SUSPICIOUS_TLDS,
   dnsblScore,
   headerScore,
   isSpam,
+  isValidScores,
   type Scores,
   urlScore,
 } from "./scoring";
@@ -21,6 +31,39 @@ export interface Env {
   REJECT_MESSAGE: string;
   /** Optional: free Spamhaus DQS key. DNSBL check is skipped (scored neutral) when unset. */
   SPAMHAUS_DQS_KEY?: string;
+  /** Optional JSON-array overrides for the built-in lists; falls back to defaults when unset/invalid. */
+  SUSPICIOUS_TLDS?: string;
+  DANGEROUS_EXTENSIONS?: string;
+  MACRO_EXTENSIONS?: string;
+  OOXML_ZIP_EXTENSIONS?: string;
+}
+
+/** Parses an optional JSON-array env var into a Set, falling back to `fallback` when unset or malformed. */
+function parseSet(
+  json: string | undefined,
+  fallback: Set<string>,
+): Set<string> {
+  if (!json) return fallback;
+  try {
+    const values = JSON.parse(json);
+    return Array.isArray(values) ? new Set(values) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Parses SIGNAL_WEIGHTS, falling back to the built-in defaults (and logging) when malformed — deploy-time validation (`scripts/validate-config.mjs`) should catch this first, this is defense in depth so a bad config degrades gracefully instead of failing every email. */
+function parseWeights(json: string): Scores {
+  try {
+    const parsed = JSON.parse(json);
+    if (isValidScores(parsed)) return parsed;
+  } catch {
+    // fall through to the warning below
+  }
+  console.error(
+    `Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${json}`,
+  );
+  return DEFAULT_SIGNAL_WEIGHTS;
 }
 
 export default {
@@ -44,7 +87,21 @@ export default {
     );
 
     const fromDomain = headerFrom.split("@")[1] ?? "";
-    const url = urlScore(extractLinks(email.html, email.text), fromDomain);
+    const url = urlScore(extractLinks(email.html, email.text), fromDomain, {
+      suspiciousTlds: parseSet(env.SUSPICIOUS_TLDS, DEFAULT_SUSPICIOUS_TLDS),
+    });
+
+    const attachment = attachmentScore(email.attachments, {
+      dangerousExtensions: parseSet(
+        env.DANGEROUS_EXTENSIONS,
+        DEFAULT_DANGEROUS_EXTENSIONS,
+      ),
+      macroExtensions: parseSet(env.MACRO_EXTENSIONS, DEFAULT_MACRO_EXTENSIONS),
+      ooxmlZipExtensions: parseSet(
+        env.OOXML_ZIP_EXTENSIONS,
+        DEFAULT_OOXML_ZIP_EXTENSIONS,
+      ),
+    });
 
     const header = headerScore({
       date: email.date,
@@ -60,8 +117,10 @@ export default {
     const dnsblResult = await checkDnsbl(senderIp, env.SPAMHAUS_DQS_KEY);
     const dnsbl = dnsblScore(dnsblResult);
 
-    const scores: Scores = { content, url, header, dnsbl };
-    const weights = JSON.parse(env.SIGNAL_WEIGHTS) as Scores;
+    const pii = piiScore(email.text ?? "");
+
+    const scores: Scores = { content, url, header, dnsbl, attachment, pii };
+    const weights = parseWeights(env.SIGNAL_WEIGHTS);
     const score = combineScores(scores, weights);
     const threshold = route.threshold ?? Number(env.DEFAULT_THRESHOLD);
     const spam = isSpam(score, threshold);

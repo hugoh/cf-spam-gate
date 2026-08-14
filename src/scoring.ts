@@ -1,4 +1,6 @@
+import remove from "confusables";
 import { parse } from "tldts";
+import type { ExtractedLink } from "./links";
 
 // No SPF/DKIM/DMARC scoring here: Cloudflare Email Routing already rejects
 // at the SMTP layer, before this worker ever runs, unless SPF-or-DKIM
@@ -34,7 +36,7 @@ export function contentScore(classifier: Classifier, text: string): number {
   return spamWeight / (spamWeight + hamWeight);
 }
 
-const SUSPICIOUS_TLDS = new Set([
+export const DEFAULT_SUSPICIOUS_TLDS = new Set([
   "zip",
   "mov",
   "top",
@@ -49,25 +51,53 @@ const SUSPICIOUS_TLDS = new Set([
   "loan",
 ]);
 
+export interface UrlScoreConfig {
+  suspiciousTlds?: Set<string>;
+}
+
 function isIpLiteral(hostname: string): boolean {
   const bare = hostname.replace(/^\[/, "").replace(/\]$/, "");
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(bare) || bare.includes(":");
 }
 
-/** URL/domain reputation heuristics: suspicious TLDs, IP-literal hosts, punycode, and domain mismatch vs the sender. */
-export function urlScore(links: string[], fromDomain: string): number {
+function isConfusable(hostname: string): boolean {
+  return remove(hostname) !== hostname;
+}
+
+const ANCHOR_DOMAIN_RE = /(?:https?:\/\/)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/i;
+
+/** The domain an anchor's visible text *claims* to point to, if it looks like a URL/domain at all. */
+function claimedDomain(anchorText: string): string | undefined {
+  const match = anchorText.match(ANCHOR_DOMAIN_RE);
+  if (!match) return undefined;
+  return parse(match[1]).domain ?? undefined;
+}
+
+/** URL/domain reputation heuristics: suspicious TLDs, IP-literal hosts, punycode/confusable domains, anchor-text/href mismatch, and domain mismatch vs the sender. */
+export function urlScore(
+  links: ExtractedLink[],
+  fromDomain: string,
+  config: UrlScoreConfig = {},
+): number {
   if (links.length === 0) return 0;
 
-  const perLink = links.map((link) => {
+  const suspiciousTlds = config.suspiciousTlds ?? DEFAULT_SUSPICIOUS_TLDS;
+
+  const perLink = links.map(({ url: link, anchorText }) => {
     let score = 0;
     try {
       const url = new URL(link);
       const parsed = parse(link);
       if (parsed.domain && parsed.domain !== fromDomain) score += 0.15;
-      if (parsed.publicSuffix && SUSPICIOUS_TLDS.has(parsed.publicSuffix))
+      if (parsed.publicSuffix && suspiciousTlds.has(parsed.publicSuffix))
         score += 0.3;
       if (isIpLiteral(url.hostname)) score += 0.4;
       if (url.hostname.includes("xn--")) score += 0.4;
+      if (isConfusable(url.hostname)) score += 0.4;
+
+      const anchorDomain = anchorText ? claimedDomain(anchorText) : undefined;
+      if (anchorDomain && parsed.domain && anchorDomain !== parsed.domain)
+        score += 0.4;
     } catch {
       score += 0.2; // unparseable "link" is itself a bad sign
     }
@@ -112,21 +142,50 @@ export interface Scores {
   url: number;
   header: number;
   dnsbl: number;
+  attachment: number;
+  pii: number;
 }
 
-/** Weighted average of the four signal scores, normalizing weights that don't sum to 1. */
+const SCORE_KEYS: Array<keyof Scores> = [
+  "content",
+  "url",
+  "header",
+  "dnsbl",
+  "attachment",
+  "pii",
+];
+
+export const DEFAULT_SIGNAL_WEIGHTS: Scores = {
+  content: 0.5,
+  url: 0.25,
+  header: 0.1,
+  dnsbl: 0.15,
+  attachment: 0.2,
+  pii: 0.05,
+};
+
+/** True when `value` has exactly the Scores shape: every key present as a finite, non-negative number. */
+export function isValidScores(value: unknown): value is Scores {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const record = value as Record<string, unknown>;
+  return SCORE_KEYS.every((key) => {
+    const n = record[key];
+    return typeof n === "number" && Number.isFinite(n) && n >= 0;
+  });
+}
+
+/** Weighted average of the signal scores, normalizing weights that don't sum to 1. */
 export function combineScores(scores: Scores, weights: Scores): number {
-  const totalWeight =
-    weights.content + weights.url + weights.header + weights.dnsbl;
-  if (totalWeight === 0) return 0;
+  let totalWeight = 0;
+  let weightedSum = 0;
 
-  const weightedSum =
-    scores.content * weights.content +
-    scores.url * weights.url +
-    scores.header * weights.header +
-    scores.dnsbl * weights.dnsbl;
+  for (const key of Object.keys(scores) as Array<keyof Scores>) {
+    totalWeight += weights[key];
+    weightedSum += scores[key] * weights[key];
+  }
 
-  return weightedSum / totalWeight;
+  return totalWeight === 0 ? 0 : weightedSum / totalWeight;
 }
 
 /** 1 when the connecting IP is on the DNSBL, 0 otherwise — "unknown" (lookup unavailable/skipped) counts as 0, not as evidence of spam. */

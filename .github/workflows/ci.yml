@@ -31,6 +31,8 @@ jobs:
         run: bun run typecheck
       - name: Test
         run: bun run test
+      - name: Validate wrangler.toml config
+        run: bun run validate-config
       - name: Verify the worker still bundles (catches Workers-runtime-incompatible deps)
         run: bunx wrangler deploy --dry-run --outdir=dist
 

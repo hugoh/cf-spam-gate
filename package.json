@@ -6,13 +6,16 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "bun run validate-config && wrangler deploy",
+    "validate-config": "bun run scripts/validate-config.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "train-model": "node scripts/train-model.mjs"
   },
   "dependencies": {
     "@ladjs/naivebayes": "^0.1.0",
+    "confusables": "^1.1.1",
+    "fflate": "^0.8.3",
     "ip-ptr": "^3.1.1",
     "postal-mime": "^3.0.0",
     "tldts": "^7.4.10"
@@ -22,7 +25,7 @@
     "@cloudflare/workers-types": "^5.20260813.1",
     "cli-progress": "^3.12.0",
     "csv-parse": "^7.0.2",
-    "fflate": "^0.8.3",
+    "smol-toml": "^1.8.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "wrangler": "^4.123.0"

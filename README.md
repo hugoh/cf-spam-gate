@@ -11,10 +11,10 @@ Runs entirely on Cloudflare's free tier: a single Worker plus a KV namespace, no
 ```sh
 bun install
 bunx wrangler kv namespace create ROUTES   # create the KV namespace, then paste its id into wrangler.toml
-bunx wrangler deploy
+bun run deploy                             # validates wrangler.toml (e.g. SIGNAL_WEIGHTS), then wrangler deploy
 ```
 
-In production, deployment is automated: pushing to `main` runs the test suite and, if it passes, `wrangler deploy` (see `.github/workflows/ci.yml`). That workflow needs two repo secrets: `CLOUDFLARE_API_TOKEN` (a token scoped to edit Workers, KV, and Email Routing) and `CLOUDFLARE_ACCOUNT_ID`.
+In production, deployment is automated: pushing to `main` runs the test suite (which includes `bun run validate-config`, catching a malformed `SIGNAL_WEIGHTS` or detection-list override before it ever ships) and, if it passes, `wrangler deploy` (see `.github/workflows/ci.yml`). That workflow needs two repo secrets: `CLOUDFLARE_API_TOKEN` (a token scoped to edit Workers, KV, and Email Routing) and `CLOUDFLARE_ACCOUNT_ID`.
 
 ### 2. Protect an address
 
@@ -83,8 +83,11 @@ dependency.
 | Var | Meaning |
 |---|---|
 | `DEFAULT_THRESHOLD` | Spam-score cutoff (0–1) used when a recipient has no per-address override. |
-| `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`) in the combined score. |
+| `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`, `attachment`, `pii`) in the combined score. |
 | `REJECT_MESSAGE` | Text returned to the sending MTA when a message is rejected. |
+| `SUSPICIOUS_TLDS`, `DANGEROUS_EXTENSIONS`, `MACRO_EXTENSIONS`, `OOXML_ZIP_EXTENSIONS` | Optional JSON-array overrides for the built-in detection lists (commented out in `wrangler.toml` with their defaults shown); each falls back to a sane default when unset or malformed. |
+
+`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the six expected keys as non-negative numbers, and that any of the four list overrides above are JSON arrays of strings — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
 
 Optionally enable the DNSBL signal by setting a free [Spamhaus DQS](https://www.spamhaus.org/free-trial/sign-up-for-a-free-data-query-service-account/) key:
 
@@ -124,7 +127,8 @@ Cloudflare Email Routing (per address, via terraform-cloudflare-spam-gate)
         │
         ├─ postal-mime          → parse the raw email
         ├─ @ladjs/naivebayes    → content classification (pretrained, bundled)
-        ├─ tldts                → link/sender domain heuristics
+        ├─ tldts, confusables   → link/sender domain heuristics
+        ├─ fflate               → attachment risk (extensions, Office macros)
         └─ Spamhaus DQS (opt.)  → DNSBL check on the connecting IP, best-effort
         │
         ▼
@@ -153,7 +157,9 @@ Those three are exactly what this worker adds.
 ### Detection signals
 
 - **Content** (`@ladjs/naivebayes`) — a Bayesian classifier trained offline (`scripts/train-model.mjs`) on the [Enron-Spam corpus](https://github.com/MWiechmann/enron_spam_data) and bundled as a JSON asset. The corpus's ham class is Enron's own internal email, so company-identifying tokens (`enron*`, `ect`, `hou`) are stripped before training — see `stripCorpusArtifacts` in `scripts/train-model.mjs`.
-- **URL/domain** (`tldts`) — suspicious/free TLDs, IP-literal links, punycode/homograph domains, and sender-vs-link domain mismatches.
+- **URL/domain** (`tldts`, `confusables`) — suspicious/free TLDs, IP-literal links, punycode/homograph domains, Unicode-confusable domains (e.g. Cyrillic look-alike characters), anchor-text-vs-href mismatches, and sender-vs-link domain mismatches.
+- **Attachment risk** (`fflate`) — dangerous executable extensions (including the double-extension trick, e.g. `invoice.pdf.exe`), and Office macro content: any OOXML attachment (`.docx`/`.xlsx`/`.pptx`/`.docm`/`.xlsm`/`.pptm`) is peeked into (without full decompression) for a `vbaProject.bin` entry, so a `.docx` misrepresenting itself as macro-free is still caught.
+- **PII/credit-card** — flags message bodies containing a Luhn-checksum-valid, card-number-shaped digit sequence (13–19 digits), which filters out phone/invoice/tracking numbers that just happen to be long strings of digits.
 - **Header heuristics** — hand-written checks: missing/malformed `Date`, `Reply-To`/`From` domain mismatch, shouting subjects.
 - **DNSBL** (optional) — checks the connecting client's IP (best-effort, extracted from the topmost `Received:` header — Workers' `email()` handler doesn't expose the SMTP connection IP directly) against Spamhaus via their [Data Query Service](https://www.spamhaus.org/resource-hub/email-security/if-you-query-the-legacy-dnsbls-via-cloudflares-dns-move-to-spamhaus-technologys-free-data-query-service/). DQS is used instead of the legacy public `zen.spamhaus.org` zone because Spamhaus silently returns "not listed" for anything queried through a major public resolver (Cloudflare's own 1.1.1.1 included) — DQS ties authorization to a registered key instead, so it works reliably from a Worker. Reversed-name construction (for both IPv4 and IPv6) uses the `ip-ptr` package. Failure or absence of a usable IP scores neutral, never as spam evidence.
 
