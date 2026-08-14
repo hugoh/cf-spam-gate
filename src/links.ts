@@ -1,15 +1,10 @@
-const ANCHOR_RE =
-  /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>(?:(.*?)<\/a>)?/gis;
+import { parseHTML } from "linkedom";
+
 const BARE_URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 
 export interface ExtractedLink {
   url: string;
   anchorText?: string;
-}
-
-function anchorTextOf(innerHtml: string | undefined): string | undefined {
-  const text = innerHtml?.replace(/<[^>]+>/g, "").trim();
-  return text || undefined;
 }
 
 export function extractLinks(
@@ -18,11 +13,17 @@ export function extractLinks(
 ): ExtractedLink[] {
   const links = new Map<string, ExtractedLink>();
 
-  for (const match of html?.matchAll(ANCHOR_RE) ?? []) {
-    const url = match[1];
-    if (!url.startsWith("http")) continue;
-    if (!links.has(url))
-      links.set(url, { url, anchorText: anchorTextOf(match[2]) });
+  if (html) {
+    const { document } = parseHTML(html);
+    for (const anchor of document.querySelectorAll("a[href]")) {
+      const url = anchor.getAttribute("href") ?? "";
+      if (!url.startsWith("http")) continue;
+      if (!links.has(url))
+        links.set(url, {
+          url,
+          anchorText: anchor.textContent?.trim() || undefined,
+        });
+    }
   }
 
   for (const match of text?.matchAll(BARE_URL_RE) ?? []) {

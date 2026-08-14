@@ -50,7 +50,10 @@ describe("extractLinks", () => {
     const html =
       '<a href="http://evil.example/phish">Click here to verify your account';
     expect(extractLinks(html, undefined)).toEqual([
-      { url: "http://evil.example/phish", anchorText: undefined },
+      {
+        url: "http://evil.example/phish",
+        anchorText: "Click here to verify your account",
+      },
     ]);
   });
 });
