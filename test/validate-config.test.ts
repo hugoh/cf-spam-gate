@@ -67,6 +67,36 @@ describe("validateVars", () => {
     expect(errors).toHaveLength(2);
   });
 
+  it("is valid when REJECT_MESSAGES is a JSON object with known category keys", () => {
+    expect(
+      validateVars({
+        SIGNAL_WEIGHTS: validWeights,
+        REJECT_MESSAGES: JSON.stringify({
+          reputation: "Sender is blocklisted.",
+          attachment: "Attachment type not allowed.",
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it("errors when REJECT_MESSAGES has an unknown category key", () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      REJECT_MESSAGES: JSON.stringify({ bogus: "nope" }),
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/REJECT_MESSAGES must be a JSON object/);
+  });
+
+  it("errors when REJECT_MESSAGES isn't valid JSON", () => {
+    const errors = validateVars({
+      SIGNAL_WEIGHTS: validWeights,
+      REJECT_MESSAGES: "{not json",
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/REJECT_MESSAGES is not valid JSON/);
+  });
+
   it("is valid when STATS_ENABLED and retention vars are well-formed", () => {
     expect(
       validateVars({

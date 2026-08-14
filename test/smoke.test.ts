@@ -120,6 +120,38 @@ describe("smoke test", () => {
     logSpy.mockRestore();
   });
 
+  it("uses the REJECT_MESSAGES category override for the dominant signal", async () => {
+    const raw = [
+      "Received: from bulk-mailer.spam-host.zip [198.51.100.66] by mx.example.com",
+      "From: Prize Dept <winner@bulk-mailer.spam-host.zip>",
+      "To: you@example.com",
+      "Reply-To: claim@totally-different-domain.example",
+      "Subject: URGENT CLAIM YOUR FREE PRIZE NOW",
+      "",
+      "CONGRATULATIONS you have WON a FREE PRIZE! Click now to claim: http://192.0.2.99/claim",
+      "Act now before this offer expires! Free money! Buy now! Limited time!",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "you@example.com",
+      "winner@bulk-mailer.spam-host.zip",
+    );
+    const envWithRejectMessages: Env = {
+      ...env,
+      REJECT_MESSAGES: JSON.stringify({
+        content: "Message rejected: looks like bulk/spam content",
+      }),
+    };
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await worker.email(message, envWithRejectMessages);
+
+    expect(message.setReject).toHaveBeenCalledWith(
+      "Message rejected: looks like bulk/spam content",
+    );
+  });
+
   it("rejects (rather than retrying) when the destination bounces the forward", async () => {
     const raw = [
       "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   combineScores,
   contentScore,
+  DEFAULT_SIGNAL_WEIGHTS,
   dnsblScore,
+  dominantCategory,
   headerScore,
   isSpam,
   isValidScores,
@@ -229,6 +231,78 @@ describe("combineScores", () => {
       { content: 0, url: 0, header: 0, dnsbl: 0, attachment: 1, pii: 0 },
     );
     expect(score).toBeCloseTo(1);
+  });
+});
+
+describe("dominantCategory", () => {
+  const weights = DEFAULT_SIGNAL_WEIGHTS;
+
+  it("attributes to 'reputation' when dnsbl dominates the weighted score", () => {
+    const scores = {
+      content: 0.2,
+      url: 0.2,
+      header: 0,
+      dnsbl: 1,
+      attachment: 0,
+      pii: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("reputation");
+  });
+
+  it("attributes to 'attachment' when attachment dominates", () => {
+    const scores = {
+      content: 0.1,
+      url: 0.1,
+      header: 0,
+      dnsbl: 0,
+      attachment: 1,
+      pii: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("attachment");
+  });
+
+  it("attributes to 'links' when url dominates", () => {
+    const scores = {
+      content: 0,
+      url: 1,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("links");
+  });
+
+  it("attributes content, header, and pii signals to 'content'", () => {
+    const scores = {
+      content: 1,
+      url: 0,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+    };
+    expect(dominantCategory(scores, weights)).toBe("content");
+
+    const headerDominant = {
+      content: 0,
+      url: 0,
+      header: 1,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 0,
+    };
+    expect(dominantCategory(headerDominant, weights)).toBe("content");
+
+    const piiDominant = {
+      content: 0,
+      url: 0,
+      header: 0,
+      dnsbl: 0,
+      attachment: 0,
+      pii: 1,
+    };
+    expect(dominantCategory(piiDominant, weights)).toBe("content");
   });
 });
 

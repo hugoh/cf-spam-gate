@@ -17,10 +17,12 @@ import {
   DEFAULT_SIGNAL_WEIGHTS,
   DEFAULT_SUSPICIOUS_TLDS,
   dnsblScore,
+  dominantCategory,
   headerScore,
   isSpam,
   isValidScores,
   type Scores,
+  type SignalCategory,
   urlScore,
 } from "./scoring";
 import { type EventOutcome, StatsCounter } from "./stats-do";
@@ -33,6 +35,8 @@ export interface Env {
   DEFAULT_THRESHOLD: string;
   SIGNAL_WEIGHTS: string;
   REJECT_MESSAGE: string;
+  /** Optional JSON object mapping a coarse signal category (reputation/attachment/links/content) to a reject message that overrides REJECT_MESSAGE for spam rejected mainly on that category's evidence. */
+  REJECT_MESSAGES?: string;
   /** Optional: free Spamhaus DQS key. DNSBL check is skipped (scored neutral) when unset. */
   SPAMHAUS_DQS_KEY?: string;
   /** Optional JSON-array overrides for the built-in lists; falls back to defaults when unset/invalid. */
@@ -88,6 +92,28 @@ function parseWeights(json: string): Scores {
     `Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${json}`,
   );
   return DEFAULT_SIGNAL_WEIGHTS;
+}
+
+/** Parses REJECT_MESSAGES, falling back to an empty map (and logging) when malformed. */
+function parseRejectMessages(
+  json: string | undefined,
+): Partial<Record<SignalCategory, string>> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      Object.values(parsed).every((v) => typeof v === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    // fall through to the warning below
+  }
+  console.error(`Invalid REJECT_MESSAGES config, ignoring: ${json}`);
+  return {};
 }
 
 export default {
@@ -180,7 +206,9 @@ export default {
         }),
       );
       await recordStats("spam");
-      message.setReject(env.REJECT_MESSAGE);
+      const category = dominantCategory(scores, weights);
+      const rejectMessages = parseRejectMessages(env.REJECT_MESSAGES);
+      message.setReject(rejectMessages[category] ?? env.REJECT_MESSAGE);
       return;
     }
 

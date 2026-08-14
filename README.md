@@ -84,7 +84,8 @@ dependency.
 |---|---|
 | `DEFAULT_THRESHOLD` | Spam-score cutoff (0–1) used when a recipient has no per-address override. |
 | `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`, `attachment`, `pii`) in the combined score. |
-| `REJECT_MESSAGE` | Text returned to the sending MTA when a message is rejected. |
+| `REJECT_MESSAGE` | Default text returned to the sending MTA when a message is rejected. |
+| `REJECT_MESSAGES` | Optional JSON object overriding `REJECT_MESSAGE` per coarse signal category (`reputation`, `attachment`, `links`, `content`) — the category is picked from whichever signal contributed most to the score, so wording can hint at the reason without exposing exact scores/thresholds. Missing categories fall back to `REJECT_MESSAGE`. |
 | `SUSPICIOUS_TLDS`, `DANGEROUS_EXTENSIONS`, `MACRO_EXTENSIONS`, `OOXML_ZIP_EXTENSIONS` | Optional JSON-array overrides for the built-in detection lists (commented out in `wrangler.toml` with their defaults shown); each falls back to a sane default when unset or malformed. |
 | `STATS_ENABLED`, `STATS_HOUR_RETENTION_DAYS`, `STATS_DAY_RETENTION_DAYS` | Optional usage-stats collection — see [step 5](#5-usage-stats-optional). |
 

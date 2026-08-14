@@ -164,6 +164,40 @@ export const DEFAULT_SIGNAL_WEIGHTS: Scores = {
   pii: 0.05,
 };
 
+export type SignalCategory = "reputation" | "attachment" | "links" | "content";
+
+export const SIGNAL_CATEGORIES: Record<keyof Scores, SignalCategory> = {
+  dnsbl: "reputation",
+  attachment: "attachment",
+  url: "links",
+  content: "content",
+  header: "content",
+  pii: "content",
+};
+
+/**
+ * Coarse category of whichever signal contributed most to the weighted
+ * score — used to pick a reject message that's informative without leaking
+ * exact scores/thresholds to an adversary probing the filter.
+ */
+export function dominantCategory(
+  scores: Scores,
+  weights: Scores,
+): SignalCategory {
+  let best: keyof Scores = SCORE_KEYS[0];
+  let bestContribution = -1;
+
+  for (const key of SCORE_KEYS) {
+    const contribution = scores[key] * weights[key];
+    if (contribution > bestContribution) {
+      bestContribution = contribution;
+      best = key;
+    }
+  }
+
+  return SIGNAL_CATEGORIES[best];
+}
+
 /** True when `value` has exactly the Scores shape: every key present as a finite, non-negative number. */
 export function isValidScores(value: unknown): value is Scores {
   if (typeof value !== "object" || value === null || Array.isArray(value))

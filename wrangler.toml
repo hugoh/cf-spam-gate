@@ -44,8 +44,12 @@ DEFAULT_THRESHOLD = "0.5"
 # Relative weights for each detection signal; the weighted average is
 # compared against the threshold. Must be valid JSON.
 SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15,\"attachment\":0.2,\"pii\":0.05}"
-# Message returned to the sending MTA when a message is rejected as spam.
+# Default message returned to the sending MTA when a message is rejected as spam.
 REJECT_MESSAGE = "Message rejected as spam"
+# Optional: per-category overrides for REJECT_MESSAGE, keyed by whichever
+# signal category contributed most to the score. Categories: reputation,
+# attachment, links, content. Missing categories fall back to REJECT_MESSAGE.
+REJECT_MESSAGES = "{\"reputation\":\"Sender IP is on a blocklist\",\"attachment\":\"Attachment type not allowed\",\"links\":\"Message contains suspicious links\",\"content\":\"Message rejected as spam\"}"
 
 # Lightweight usage stats (message counts, spam/forward split, per-signal
 # fire counts) kept as hourly/daily RRD-style buckets and exposed at
