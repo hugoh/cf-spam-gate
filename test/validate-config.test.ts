@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { validateVars } from "../scripts/validate-config.mjs";
 
 const validWeights = JSON.stringify({
-  content: 0.35,
-  url: 0.2,
+  content: 0.3,
+  url: 0.15,
   header: 0.05,
   dnsbl: 0.1,
-  attachment: 0.25,
+  attachment: 0.1,
   pii: 0.05,
+  auth: 0.25,
 });
 
 describe("validateVars", () => {

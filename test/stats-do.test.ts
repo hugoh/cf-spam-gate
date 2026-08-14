@@ -14,6 +14,7 @@ const ZERO_SCORES = {
   dnsbl: 0,
   attachment: 0,
   pii: 0,
+  auth: 0,
 };
 
 function stub() {

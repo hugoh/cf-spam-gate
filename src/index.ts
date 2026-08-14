@@ -5,6 +5,7 @@ import {
   DEFAULT_MACRO_EXTENSIONS,
   DEFAULT_OOXML_ZIP_EXTENSIONS,
 } from "./attachment";
+import { parseAuthenticationResults } from "./auth";
 import { getClassifier } from "./classifier";
 import { checkDnsbl } from "./dnsbl";
 import { extractLinks } from "./links";
@@ -12,6 +13,7 @@ import { piiScore } from "./pii";
 import { extractSenderIp } from "./received-header";
 import { lookupRoute } from "./routing";
 import {
+  authScore,
   combineScores,
   contentScore,
   DEFAULT_SIGNAL_WEIGHTS,
@@ -169,7 +171,20 @@ export default {
 
     const pii = piiScore(email.text ?? "");
 
-    const scores: Scores = { content, url, header, dnsbl, attachment, pii };
+    const authResultsHeader = email.headers.find(
+      (h) => h.key.toLowerCase() === "authentication-results",
+    )?.value;
+    const auth = authScore(parseAuthenticationResults(authResultsHeader));
+
+    const scores: Scores = {
+      content,
+      url,
+      header,
+      dnsbl,
+      attachment,
+      pii,
+      auth,
+    };
     const weights = parseWeights(env.SIGNAL_WEIGHTS);
     const score = combineScores(scores, weights);
     const threshold = route.threshold ?? Number(env.DEFAULT_THRESHOLD);

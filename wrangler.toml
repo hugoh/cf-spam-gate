@@ -43,7 +43,7 @@ enabled = true
 DEFAULT_THRESHOLD = "0.5"
 # Relative weights for each detection signal; the weighted average is
 # compared against the threshold. Must be valid JSON.
-SIGNAL_WEIGHTS = "{\"content\":0.5,\"url\":0.25,\"header\":0.1,\"dnsbl\":0.15,\"attachment\":0.2,\"pii\":0.05}"
+SIGNAL_WEIGHTS = "{\"content\":0.3,\"url\":0.15,\"header\":0.05,\"dnsbl\":0.1,\"attachment\":0.1,\"pii\":0.05,\"auth\":0.25}"
 # Default message returned to the sending MTA when a message is rejected as spam.
 REJECT_MESSAGE = "Message rejected as spam"
 # Optional: per-category overrides for REJECT_MESSAGE, keyed by whichever

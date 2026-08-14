@@ -83,13 +83,13 @@ dependency.
 | Var | Meaning |
 |---|---|
 | `DEFAULT_THRESHOLD` | Spam-score cutoff (0–1) used when a recipient has no per-address override. |
-| `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`, `attachment`, `pii`) in the combined score. |
+| `SIGNAL_WEIGHTS` | JSON weights for each detection signal (`content`, `url`, `header`, `dnsbl`, `attachment`, `pii`, `auth`) in the combined score. |
 | `REJECT_MESSAGE` | Default text returned to the sending MTA when a message is rejected. |
 | `REJECT_MESSAGES` | Optional JSON object overriding `REJECT_MESSAGE` per coarse signal category (`reputation`, `attachment`, `links`, `content`) — the category is picked from whichever signal contributed most to the score, so wording can hint at the reason without exposing exact scores/thresholds. Missing categories fall back to `REJECT_MESSAGE`. |
 | `SUSPICIOUS_TLDS`, `DANGEROUS_EXTENSIONS`, `MACRO_EXTENSIONS`, `OOXML_ZIP_EXTENSIONS` | Optional JSON-array overrides for the built-in detection lists (commented out in `wrangler.toml` with their defaults shown); each falls back to a sane default when unset or malformed. |
 | `STATS_ENABLED`, `STATS_HOUR_RETENTION_DAYS`, `STATS_DAY_RETENTION_DAYS` | Optional usage-stats collection — see [step 5](#5-usage-stats-optional). |
 
-`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the six expected keys as non-negative numbers, that any of the four list overrides above are JSON arrays of strings, and that `STATS_ENABLED`/`STATS_HOUR_RETENTION_DAYS`/`STATS_DAY_RETENTION_DAYS` (if set) are well-formed — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
+`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the seven expected keys as non-negative numbers, that any of the four list overrides above are JSON arrays of strings, and that `STATS_ENABLED`/`STATS_HOUR_RETENTION_DAYS`/`STATS_DAY_RETENTION_DAYS` (if set) are well-formed — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
 
 Optionally enable the DNSBL signal by setting a free [Spamhaus DQS](https://www.spamhaus.org/free-trial/sign-up-for-a-free-data-query-service-account/) key:
 
@@ -182,13 +182,12 @@ Before a message ever reaches this Worker, Cloudflare's own Email Routing has al
 - **Run a built-in phishing filter.** A non-configurable heuristic layer that blocks known phishing patterns before a message is even offered for forwarding.
 - **Added its own DKIM signatures on the way out**, so forwarded mail is more likely to itself pass authentication at the destination mailbox.
 
-Because of this, re-verifying SPF/DKIM/DMARC inside the Worker would just repeat a check that already ran — a message reaching `email()` has, by definition, cleared that bar. So this worker doesn't touch SPF/DKIM/DMARC at all; it spends its whole budget on the gap Cloudflare leaves open:
+Because of this, re-verifying SPF/DKIM pass/fail inside the Worker would just repeat a check that already ran — a message reaching `email()` has, by definition, cleared the SPF-*or*-DKIM bar. But that's an OR, not an AND: a message can (and, per real-world reports, does) reach the worker with DKIM passing while SPF softfails, or vice versa. This worker reads Cloudflare's own `Authentication-Results` header (added to every message before it reaches `email()`) and scores that gap as a signal — worse of the two mechanisms, graded by severity (`softfail` counts less than an outright `fail`) — rather than treating "cleared Cloudflare's OR gate" as "fully authenticated." On top of that, this worker adds what wasn't there at all before:
 
 - **No content-based scoring** — no keyword/ML classification of the message body.
 - **No DNSBL/blocklist check** of the connecting IP.
-- **No sender-reputation scoring** beyond the DKIM/SPF/DMARC pass-fail Cloudflare already applies.
 
-Those three are exactly what this worker adds.
+Those, plus the SPF/DKIM gap above, are what this worker adds.
 
 ### Detection signals
 
@@ -198,6 +197,7 @@ Those three are exactly what this worker adds.
 - **PII/credit-card** — flags message bodies containing a Luhn-checksum-valid, card-number-shaped digit sequence (13–19 digits), which filters out phone/invoice/tracking numbers that just happen to be long strings of digits.
 - **Header heuristics** — hand-written checks: missing/malformed `Date`, `Reply-To`/`From` domain mismatch, shouting subjects.
 - **DNSBL** (optional) — checks the connecting client's IP (best-effort, extracted from the topmost `Received:` header — Workers' `email()` handler doesn't expose the SMTP connection IP directly) against Spamhaus via their [Data Query Service](https://www.spamhaus.org/resource-hub/email-security/if-you-query-the-legacy-dnsbls-via-cloudflares-dns-move-to-spamhaus-technologys-free-data-query-service/). DQS is used instead of the legacy public `zen.spamhaus.org` zone because Spamhaus silently returns "not listed" for anything queried through a major public resolver (Cloudflare's own 1.1.1.1 included) — DQS ties authorization to a registered key instead, so it works reliably from a Worker. Reversed-name construction (for both IPv4 and IPv6) uses the `ip-ptr` package. Failure or absence of a usable IP scores neutral, never as spam evidence.
+- **SPF/DKIM auth** — parses Cloudflare's own `Authentication-Results` header (no re-verification, just reading Cloudflare's own results) and scores the worse of the SPF/DKIM verdicts. Since Cloudflare only requires one of the two to pass, this picks up the case where a message clears that OR gate on a weak result (e.g. DKIM `pass` but SPF `softfail`). Missing results score neutral, not as spam evidence.
 
 ### Why not the `spamscanner` npm package
 

@@ -37,7 +37,7 @@ export function validateVars(vars) {
       if (!isValidScores(weights)) {
         errors.push(
           "SIGNAL_WEIGHTS must have exactly the keys content, url, header, " +
-            "dnsbl, attachment, pii, each a finite number >= 0.",
+            "dnsbl, attachment, pii, auth, each a finite number >= 0.",
         );
       }
     } catch (error) {
