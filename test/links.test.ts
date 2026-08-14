@@ -45,4 +45,12 @@ describe("extractLinks", () => {
       { url: "https://example.com/a", anchorText: undefined },
     ]);
   });
+
+  it("extracts the href even when the anchor tag is never closed", () => {
+    const html =
+      '<a href="http://evil.example/phish">Click here to verify your account';
+    expect(extractLinks(html, undefined)).toEqual([
+      { url: "http://evil.example/phish", anchorText: undefined },
+    ]);
+  });
 });

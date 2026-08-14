@@ -1,4 +1,5 @@
-const ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>(.*?)<\/a>/gis;
+const ANCHOR_RE =
+  /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>(?:(.*?)<\/a>)?/gis;
 const BARE_URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 
 export interface ExtractedLink {
@@ -6,8 +7,8 @@ export interface ExtractedLink {
   anchorText?: string;
 }
 
-function anchorTextOf(innerHtml: string): string | undefined {
-  const text = innerHtml.replace(/<[^>]+>/g, "").trim();
+function anchorTextOf(innerHtml: string | undefined): string | undefined {
+  const text = innerHtml?.replace(/<[^>]+>/g, "").trim();
   return text || undefined;
 }
 
