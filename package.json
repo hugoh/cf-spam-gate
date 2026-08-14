@@ -17,6 +17,7 @@
     "confusables": "^1.1.1",
     "fast-luhn": "^2.0.2",
     "fflate": "^0.8.3",
+    "html-template-tag": "^5.0.0",
     "ip-ptr": "^3.1.1",
     "linkedom": "^0.18.13",
     "postal-mime": "^3.0.0",

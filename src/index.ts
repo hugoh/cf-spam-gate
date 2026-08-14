@@ -190,8 +190,8 @@ export default {
 
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const isJson = url.pathname === "/stats" || url.pathname === "/stats.json";
-    const isHtml = url.pathname === "/stats.html";
+    const isJson = url.pathname === "/stats.json";
+    const isHtml = url.pathname === "/stats" || url.pathname === "/stats.html";
 
     if (!isStatsEnabled(env) || !(isJson || isHtml)) {
       return new Response("Not found", { status: 404 });

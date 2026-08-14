@@ -103,11 +103,11 @@ Without a key, that signal is simply skipped (scored neutral, not "spam") — no
 Set `STATS_ENABLED = "true"` in `wrangler.toml`'s `[vars]` (default `"false"`) to
 collect lightweight RRD-style usage counters — message volume, spam/forward
 split, and which detection signals fired — in a SQLite-backed Durable Object,
-and expose them read-only, both as JSON and as a plain HTML page:
+and expose them read-only, both as an HTML page and as JSON:
 
-- `GET /stats` or `/stats.json?granularity=hour|day&limit=N` — raw JSON.
-- `GET /stats.html?granularity=hour|day&limit=N` — a small dependency-free
-  HTML table of the same data, for glancing at in a browser.
+- `GET /stats` or `/stats.html?granularity=hour|day&limit=N` — a small HTML
+  table of the data, for glancing at in a browser.
+- `GET /stats.json?granularity=hour|day&limit=N` — the same data as raw JSON.
 
 When disabled (the default), no data is collected and all three paths 404.
 
