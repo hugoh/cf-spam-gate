@@ -9,6 +9,7 @@ describe("renderStatsPage", () => {
         total: 3,
         spam: 1,
         forwarded: 2,
+        failed: 1,
         signals: { content: 1, dnsbl: 0 },
       },
     ]);
@@ -39,6 +40,7 @@ describe("renderStatsPage", () => {
         total: 1,
         spam: 0,
         forwarded: 1,
+        failed: 0,
         signals: {},
       },
     ]);

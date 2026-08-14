@@ -23,7 +23,7 @@ import {
   type Scores,
   urlScore,
 } from "./scoring";
-import { StatsCounter } from "./stats-do";
+import { type EventOutcome, StatsCounter } from "./stats-do";
 import { renderStatsPage } from "./stats-page";
 
 export { StatsCounter };
@@ -149,26 +149,13 @@ export default {
     const threshold = route.threshold ?? Number(env.DEFAULT_THRESHOLD);
     const spam = isSpam(score, threshold);
 
-    console.log(
-      JSON.stringify({
-        to: message.to,
-        from: headerFrom,
-        subject: email.subject,
-        senderIp,
-        dnsblResult,
-        scores,
-        score,
-        threshold,
-        verdict: spam ? "reject" : "forward",
-      }),
-    );
-
-    if (isStatsEnabled(env)) {
+    const recordStats = async (outcome: EventOutcome) => {
+      if (!isStatsEnabled(env)) return;
       try {
         const stats = env.STATS.get(env.STATS.idFromName("stats"));
         await stats.recordEvent(
           scores,
-          spam,
+          outcome,
           new Date().toISOString(),
           statsRetention(env),
         );
@@ -176,9 +163,23 @@ export default {
         // Stats collection is best-effort — never let it block mail delivery.
         console.error(`Failed to record stats: ${error}`);
       }
-    }
+    };
 
     if (spam) {
+      console.log(
+        JSON.stringify({
+          to: message.to,
+          from: headerFrom,
+          subject: email.subject,
+          senderIp,
+          dnsblResult,
+          scores,
+          score,
+          threshold,
+          verdict: "reject",
+        }),
+      );
+      await recordStats("spam");
       message.setReject(env.REJECT_MESSAGE);
       return;
     }
@@ -191,10 +192,26 @@ export default {
         console.error(
           `Forward to ${destination} failed, rejecting instead: ${error}`,
         );
+        await recordStats("failed");
         message.setReject(env.REJECT_MESSAGE);
         return;
       }
     }
+
+    console.log(
+      JSON.stringify({
+        to: message.to,
+        from: headerFrom,
+        subject: email.subject,
+        senderIp,
+        dnsblResult,
+        scores,
+        score,
+        threshold,
+        verdict: "forward",
+      }),
+    );
+    await recordStats("forwarded");
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {

@@ -28,16 +28,30 @@ describe("StatsCounter", () => {
       const instance = raw as unknown as StatsCounter;
       instance.recordEvent(
         ZERO_SCORES,
-        false,
+        "forwarded",
         "2026-08-14T09:30:00.000Z",
         RETENTION,
       );
 
       expect(instance.getStats("hour", 10)).toEqual([
-        { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
+        {
+          key: "2026-08-14T09",
+          total: 1,
+          spam: 0,
+          forwarded: 1,
+          failed: 0,
+          signals: {},
+        },
       ]);
       expect(instance.getStats("day", 10)).toEqual([
-        { key: "2026-08-14", total: 1, spam: 0, forwarded: 1, signals: {} },
+        {
+          key: "2026-08-14",
+          total: 1,
+          spam: 0,
+          forwarded: 1,
+          failed: 0,
+          signals: {},
+        },
       ]);
     });
   });
@@ -48,19 +62,32 @@ describe("StatsCounter", () => {
       const instance = raw as unknown as StatsCounter;
       instance.recordEvent(
         ZERO_SCORES,
-        true,
+        "spam",
         "2026-08-14T09:05:00.000Z",
         RETENTION,
       );
       instance.recordEvent(
         ZERO_SCORES,
-        false,
+        "forwarded",
         "2026-08-14T09:55:00.000Z",
+        RETENTION,
+      );
+      instance.recordEvent(
+        ZERO_SCORES,
+        "failed",
+        "2026-08-14T09:56:00.000Z",
         RETENTION,
       );
 
       expect(instance.getStats("hour", 10)).toEqual([
-        { key: "2026-08-14T09", total: 2, spam: 1, forwarded: 1, signals: {} },
+        {
+          key: "2026-08-14T09",
+          total: 3,
+          spam: 1,
+          forwarded: 1,
+          failed: 1,
+          signals: {},
+        },
       ]);
     });
   });
@@ -71,13 +98,13 @@ describe("StatsCounter", () => {
       const instance = raw as unknown as StatsCounter;
       instance.recordEvent(
         ZERO_SCORES,
-        false,
+        "forwarded",
         "2026-08-14T09:00:00.000Z",
         RETENTION,
       );
       instance.recordEvent(
         ZERO_SCORES,
-        false,
+        "forwarded",
         "2026-08-14T10:00:00.000Z",
         RETENTION,
       );
@@ -88,7 +115,14 @@ describe("StatsCounter", () => {
         "2026-08-14T09",
       ]);
       expect(instance.getStats("day", 10)).toEqual([
-        { key: "2026-08-14", total: 2, spam: 0, forwarded: 2, signals: {} },
+        {
+          key: "2026-08-14",
+          total: 2,
+          spam: 0,
+          forwarded: 2,
+          failed: 0,
+          signals: {},
+        },
       ]);
     });
   });
@@ -99,13 +133,13 @@ describe("StatsCounter", () => {
       const instance = raw as unknown as StatsCounter;
       instance.recordEvent(
         { ...ZERO_SCORES, content: 0.9, url: 0.4 },
-        true,
+        "spam",
         "2026-08-14T09:00:00.000Z",
         RETENTION,
       );
       instance.recordEvent(
         { ...ZERO_SCORES, content: 0.6, dnsbl: 1 },
-        true,
+        "spam",
         "2026-08-14T09:10:00.000Z",
         RETENTION,
       );
@@ -121,14 +155,18 @@ describe("StatsCounter", () => {
     const object = stub();
     await runInDurableObject(object, async (raw) => {
       const instance = raw as unknown as StatsCounter;
-      instance.recordEvent(ZERO_SCORES, false, "2026-01-01T00:00:00.000Z", {
-        hour: 1,
-        day: 1,
-      });
-      instance.recordEvent(ZERO_SCORES, false, "2026-01-05T00:00:00.000Z", {
-        hour: 1,
-        day: 1,
-      });
+      instance.recordEvent(
+        ZERO_SCORES,
+        "forwarded",
+        "2026-01-01T00:00:00.000Z",
+        { hour: 1, day: 1 },
+      );
+      instance.recordEvent(
+        ZERO_SCORES,
+        "forwarded",
+        "2026-01-05T00:00:00.000Z",
+        { hour: 1, day: 1 },
+      );
 
       expect(instance.getStats("hour", 10).map((b) => b.key)).toEqual([
         "2026-01-05T00",

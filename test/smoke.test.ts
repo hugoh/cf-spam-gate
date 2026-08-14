@@ -140,14 +140,29 @@ describe("smoke test", () => {
     message.forward = vi.fn(async () => {
       throw new Error("destination rejected: 550 mailbox unavailable");
     });
+    const recordEvent = vi.fn();
+    const envWithStats: Env = {
+      ...env,
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => ({ recordEvent })),
+      } as unknown as Env["STATS"],
+    };
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await worker.email(message, env);
+    await worker.email(message, envWithStats);
 
     expect(message.forward).toHaveBeenCalledWith("real@elsewhere.example");
     expect(message.setReject).toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalled();
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      "failed",
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -220,7 +235,14 @@ describe("smoke test", () => {
   it("records stats and serves them at /stats(.html|.json) when STATS_ENABLED is true", async () => {
     const recordEvent = vi.fn();
     const getStats = vi.fn(async () => [
-      { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
+      {
+        key: "2026-08-14T09",
+        total: 1,
+        spam: 0,
+        forwarded: 1,
+        failed: 0,
+        signals: {},
+      },
     ]);
     const stub = { recordEvent, getStats };
     const envWithStats: Env = {
@@ -253,7 +275,7 @@ describe("smoke test", () => {
 
     expect(recordEvent).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.any(Number) }),
-      false,
+      "forwarded",
       expect.any(String),
       { hour: 30, day: 400 },
     );
@@ -261,7 +283,14 @@ describe("smoke test", () => {
     const expectedJson = {
       granularity: "hour",
       buckets: [
-        { key: "2026-08-14T09", total: 1, spam: 0, forwarded: 1, signals: {} },
+        {
+          key: "2026-08-14T09",
+          total: 1,
+          spam: 0,
+          forwarded: 1,
+          failed: 0,
+          signals: {},
+        },
       ],
     };
 

@@ -8,11 +8,14 @@ export interface RetentionDays {
   day: number;
 }
 
+export type EventOutcome = "spam" | "forwarded" | "failed";
+
 export interface StatsBucket {
   key: string;
   total: number;
   spam: number;
   forwarded: number;
+  failed: number;
   signals: Partial<Record<keyof Scores, number>>;
 }
 
@@ -42,6 +45,7 @@ interface BucketRow {
   total: number;
   spam: number;
   forwarded: number;
+  failed: number;
   signals: string;
 }
 
@@ -55,15 +59,23 @@ export class StatsCounter extends DurableObject<unknown> {
          total INTEGER NOT NULL DEFAULT 0,
          spam INTEGER NOT NULL DEFAULT 0,
          forwarded INTEGER NOT NULL DEFAULT 0,
+         failed INTEGER NOT NULL DEFAULT 0,
          signals TEXT NOT NULL DEFAULT '{}',
          PRIMARY KEY (granularity, key)
        )`,
     );
+    try {
+      this.ctx.storage.sql.exec(
+        "ALTER TABLE buckets ADD COLUMN failed INTEGER NOT NULL DEFAULT 0",
+      );
+    } catch {
+      // Column already exists — fine on every startup after the first migration.
+    }
   }
 
   recordEvent(
     scores: Scores,
-    spam: boolean,
+    outcome: EventOutcome,
     nowIso: string,
     retentionDays: RetentionDays,
   ): void {
@@ -89,17 +101,19 @@ export class StatsCounter extends DurableObject<unknown> {
       }
 
       this.ctx.storage.sql.exec(
-        `INSERT INTO buckets (granularity, key, total, spam, forwarded, signals)
-         VALUES (?, ?, 1, ?, ?, ?)
+        `INSERT INTO buckets (granularity, key, total, spam, forwarded, failed, signals)
+         VALUES (?, ?, 1, ?, ?, ?, ?)
          ON CONFLICT (granularity, key) DO UPDATE SET
            total = total + 1,
            spam = spam + excluded.spam,
            forwarded = forwarded + excluded.forwarded,
+           failed = failed + excluded.failed,
            signals = excluded.signals`,
         granularity,
         key,
-        spam ? 1 : 0,
-        spam ? 0 : 1,
+        outcome === "spam" ? 1 : 0,
+        outcome === "forwarded" ? 1 : 0,
+        outcome === "failed" ? 1 : 0,
         JSON.stringify(signals),
       );
 
@@ -124,6 +138,7 @@ export class StatsCounter extends DurableObject<unknown> {
         total: row.total,
         spam: row.spam,
         forwarded: row.forwarded,
+        failed: row.failed,
         signals: JSON.parse(row.signals),
       }));
   }

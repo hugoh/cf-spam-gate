@@ -16,6 +16,7 @@ function bucketRow(bucket: StatsBucket): string {
     <td>${String(bucket.total)}</td>
     <td>${String(bucket.spam)}</td>
     <td>${String(bucket.forwarded)}</td>
+    <td>${String(bucket.failed)}</td>
     <td>${formatSignals(bucket.signals)}</td>
   </tr>`;
 }
@@ -33,7 +34,7 @@ export function renderStatsPage(
       ? buckets.map(bucketRow)
       : [
           html`<tr>
-            <td colspan="5">No data yet.</td>
+            <td colspan="6">No data yet.</td>
           </tr>`,
         ];
 
@@ -76,12 +77,14 @@ export function renderStatsPage(
           }
           td:nth-child(2),
           td:nth-child(3),
-          td:nth-child(4) {
+          td:nth-child(4),
+          td:nth-child(5) {
             text-align: right;
           }
           th:nth-child(2),
           th:nth-child(3),
-          th:nth-child(4) {
+          th:nth-child(4),
+          th:nth-child(5) {
             text-align: right;
           }
         </style>
@@ -101,6 +104,7 @@ export function renderStatsPage(
               <th>Total</th>
               <th>Spam</th>
               <th>Forwarded</th>
+              <th>Failed</th>
               <th>Signals fired</th>
             </tr>
           </thead>
