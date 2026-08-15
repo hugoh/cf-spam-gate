@@ -29,7 +29,7 @@ bunx wrangler kv key put --binding=ROUTES "you@example.com" \
   '{"destinations": ["you@your-real-inbox.example"], "threshold": 0.5}'
 ```
 
-- `destinations` (required): where clean mail actually gets forwarded. Can be more than one address.
+- `destinations` (required): where clean mail actually gets forwarded. Can be more than one address — all of them are always attempted, and the message is rejected once if any destination fails.
 - `threshold` (optional): overrides the global `DEFAULT_THRESHOLD` var for this recipient only — e.g. a mailing-list address that gets a lot of borderline-spammy-looking mail might want a higher threshold than a personal address.
 
 An address with no `ROUTES` entry is rejected outright rather than silently guessed at — this worker only handles addresses you've explicitly configured.

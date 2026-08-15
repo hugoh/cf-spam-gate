@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { SCORE_KEYS, type Scores } from "./scoring";
+import { SCORE_KEYS, type Scores } from "./signals";
 
 export type Granularity = "hour" | "day";
 

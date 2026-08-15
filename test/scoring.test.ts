@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   authScore,
-  combineScores,
   contentScore,
-  DEFAULT_SIGNAL_WEIGHTS,
   dnsblScore,
-  dominantCategory,
   headerScore,
   isSpam,
-  isValidScores,
   urlScore,
 } from "../src/scoring";
+import {
+  combineScores,
+  DEFAULT_SIGNAL_WEIGHTS,
+  dominantCategory,
+  isValidScores,
+} from "../src/signals";
 
 describe("contentScore", () => {
   // naivebayes.probabilities() returns *log* probabilities (large negative
