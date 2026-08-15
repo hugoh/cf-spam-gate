@@ -203,6 +203,112 @@ describe("smoke test", () => {
     errorSpy.mockRestore();
   });
 
+  it("attempts every destination even if an earlier one fails, and rejects once", async () => {
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: multi@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "multi@example.com",
+      "friend@elsewhere.example",
+    );
+    message.forward = vi.fn(async (destination: string) => {
+      if (destination === "first@elsewhere.example") {
+        throw new Error("destination rejected: 550 mailbox unavailable");
+      }
+      return {} as EmailSendResult;
+    });
+    const recordEvent = vi.fn();
+    const envWithMultipleDestinations: Env = {
+      ...env,
+      ROUTES: fakeKv({
+        "multi@example.com": JSON.stringify({
+          destinations: ["first@elsewhere.example", "second@elsewhere.example"],
+        }),
+      }),
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => ({ recordEvent })),
+      } as unknown as Env["STATS"],
+    };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await worker.email(message, envWithMultipleDestinations);
+
+    expect(message.forward).toHaveBeenCalledWith("first@elsewhere.example");
+    expect(message.forward).toHaveBeenCalledWith("second@elsewhere.example");
+    expect(message.setReject).toHaveBeenCalledTimes(1);
+    expect(recordEvent).toHaveBeenCalledTimes(1);
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      "failed",
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("forwards to all destinations when there are multiple", async () => {
+    const raw = [
+      "Received: from mail.elsewhere.example [203.0.113.7] by mx.example.com",
+      "From: A Friend <friend@elsewhere.example>",
+      "To: multi@example.com",
+      "Subject: Lunch tomorrow?",
+      `Date: ${new Date().toUTCString()}`,
+      "",
+      "Hey, are you free for lunch tomorrow around noon?",
+      "",
+    ].join("\r\n");
+
+    const message = fakeMessage(
+      raw,
+      "multi@example.com",
+      "friend@elsewhere.example",
+    );
+    const recordEvent = vi.fn();
+    const envWithMultipleDestinations: Env = {
+      ...env,
+      ROUTES: fakeKv({
+        "multi@example.com": JSON.stringify({
+          destinations: ["first@elsewhere.example", "second@elsewhere.example"],
+        }),
+      }),
+      STATS_ENABLED: "true",
+      STATS: {
+        idFromName: vi.fn(() => "id"),
+        get: vi.fn(() => ({ recordEvent })),
+      } as unknown as Env["STATS"],
+    };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await worker.email(message, envWithMultipleDestinations);
+
+    expect(message.forward).toHaveBeenCalledWith("first@elsewhere.example");
+    expect(message.forward).toHaveBeenCalledWith("second@elsewhere.example");
+    expect(message.setReject).not.toHaveBeenCalled();
+    expect(recordEvent).toHaveBeenCalledTimes(1);
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.any(Number) }),
+      "forwarded",
+      expect.any(String),
+      { hour: 30, day: 400 },
+    );
+
+    logSpy.mockRestore();
+  });
+
   it("rejects mail to a recipient with no ROUTES entry", async () => {
     const raw = [
       "From: friend@elsewhere.example",
