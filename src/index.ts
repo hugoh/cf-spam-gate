@@ -120,7 +120,12 @@ function parseRejectMessages(
 
 export default {
   async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
-    const route = await lookupRoute(env.ROUTES, message.to);
+    const [route, email] = await Promise.all([
+      lookupRoute(env.ROUTES, message.to),
+      new Response(message.raw)
+        .arrayBuffer()
+        .then((rawBuffer) => PostalMime.parse(rawBuffer)),
+    ]);
     if (!route) {
       // No ROUTES entry means this address isn't meant to be handled by
       // this worker at all — misconfigured Email Routing rule, most likely.
@@ -128,10 +133,13 @@ export default {
       return;
     }
 
-    const rawBuffer = await new Response(message.raw).arrayBuffer();
-    const email = await PostalMime.parse(rawBuffer);
-
     const headerFrom = email.from?.address ?? message.from;
+
+    const topReceived = email.headers.find(
+      (h) => h.key.toLowerCase() === "received",
+    )?.value;
+    const senderIp = extractSenderIp(topReceived);
+    const dnsblPromise = checkDnsbl(senderIp, env.SPAMHAUS_DQS_KEY);
 
     const content = contentScore(
       getClassifier(),
@@ -162,11 +170,7 @@ export default {
       subject: email.subject,
     });
 
-    const topReceived = email.headers.find(
-      (h) => h.key.toLowerCase() === "received",
-    )?.value;
-    const senderIp = extractSenderIp(topReceived);
-    const dnsblResult = await checkDnsbl(senderIp, env.SPAMHAUS_DQS_KEY);
+    const dnsblResult = await dnsblPromise;
     const dnsbl = dnsblScore(dnsblResult);
 
     const pii = piiScore(email.text ?? "");
@@ -227,18 +231,24 @@ export default {
       return;
     }
 
-    for (const destination of route.destinations) {
-      try {
-        await message.forward(destination);
-      } catch (error) {
-        // Uncaught here means Cloudflare reports a *temporary* failure to the sender, who keeps retrying forever.
+    const forwardResults = await Promise.allSettled(
+      route.destinations.map((destination) => message.forward(destination)),
+    );
+    const failures = forwardResults.flatMap((result, i) =>
+      result.status === "rejected"
+        ? [{ destination: route.destinations[i], error: result.reason }]
+        : [],
+    );
+    if (failures.length > 0) {
+      // Uncaught here means Cloudflare reports a *temporary* failure to the sender, who keeps retrying forever.
+      for (const { destination, error } of failures) {
         console.error(
           `Forward to ${destination} failed, rejecting instead: ${error}`,
         );
-        await recordStats("failed");
-        message.setReject(env.REJECT_MESSAGE);
-        return;
       }
+      await recordStats("failed");
+      message.setReject(env.REJECT_MESSAGE);
+      return;
     }
 
     console.log(
