@@ -4,7 +4,7 @@ import {
   DEFAULT_MACRO_EXTENSIONS,
   DEFAULT_OOXML_ZIP_EXTENSIONS,
 } from "./attachment";
-import { checkDnsbl } from "./dnsbl";
+import { checkDnsbl, type DnsblResult } from "./dnsbl";
 import { extractSenderIp } from "./received-header";
 import { lookupRoute } from "./routing";
 import { DEFAULT_SUSPICIOUS_TLDS, isSpam } from "./scoring";
@@ -59,54 +59,80 @@ function statsRetention(env: Env) {
   };
 }
 
+export function logVerdict(
+  verdict: "reject" | "forward",
+  fields: {
+    to: string;
+    from: string;
+    subject: string | undefined;
+    senderIp: string | undefined;
+    dnsblResult: DnsblResult;
+    scores: Scores;
+    score: number;
+    threshold: number;
+  },
+) {
+  console.log(JSON.stringify({ ...fields, verdict }));
+}
+
+/** Parses an optional JSON env var, falling back to `fallback` (and logging via `onInvalid` when given) when unset or malformed. Deploy-time validation (`scripts/validate-config.mjs`) should catch bad config first — this is defense in depth so a bad config degrades gracefully instead of failing every email. */
+export function parseJsonEnvVar<T>(
+  json: string | undefined,
+  validate: (parsed: unknown) => parsed is T,
+  fallback: T,
+  onInvalid?: (json: string) => void,
+): T {
+  if (!json) return fallback;
+  try {
+    const parsed = JSON.parse(json);
+    if (validate(parsed)) return parsed;
+  } catch {
+    // fall through to onInvalid/fallback below
+  }
+  onInvalid?.(json);
+  return fallback;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value);
+}
+
+function isStringRecord(
+  value: unknown,
+): value is Partial<Record<SignalCategory, string>> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((v) => typeof v === "string")
+  );
+}
+
 /** Parses an optional JSON-array env var into a Set, falling back to `fallback` when unset or malformed. */
-function parseSet(
+export function parseSet(
   json: string | undefined,
   fallback: Set<string>,
 ): Set<string> {
-  if (!json) return fallback;
-  try {
-    const values = JSON.parse(json);
-    return Array.isArray(values) ? new Set(values) : fallback;
-  } catch {
-    return fallback;
-  }
+  const values = parseJsonEnvVar<string[] | null>(json, isStringArray, null);
+  return values ? new Set(values) : fallback;
 }
 
-/** Parses SIGNAL_WEIGHTS, falling back to the built-in defaults (and logging) when malformed — deploy-time validation (`scripts/validate-config.mjs`) should catch this first, this is defense in depth so a bad config degrades gracefully instead of failing every email. */
-function parseWeights(json: string): Scores {
-  try {
-    const parsed = JSON.parse(json);
-    if (isValidScores(parsed)) return parsed;
-  } catch {
-    // fall through to the warning below
-  }
-  console.error(
-    `Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${json}`,
+/** Parses SIGNAL_WEIGHTS, falling back to the built-in defaults (and logging) when malformed. */
+export function parseWeights(json: string): Scores {
+  return parseJsonEnvVar(json, isValidScores, DEFAULT_SIGNAL_WEIGHTS, (raw) =>
+    console.error(
+      `Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${raw}`,
+    ),
   );
-  return DEFAULT_SIGNAL_WEIGHTS;
 }
 
 /** Parses REJECT_MESSAGES, falling back to an empty map (and logging) when malformed. */
-function parseRejectMessages(
+export function parseRejectMessages(
   json: string | undefined,
 ): Partial<Record<SignalCategory, string>> {
-  if (!json) return {};
-  try {
-    const parsed = JSON.parse(json);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed) &&
-      Object.values(parsed).every((v) => typeof v === "string")
-    ) {
-      return parsed;
-    }
-  } catch {
-    // fall through to the warning below
-  }
-  console.error(`Invalid REJECT_MESSAGES config, ignoring: ${json}`);
-  return {};
+  return parseJsonEnvVar(json, isStringRecord, {}, (raw) =>
+    console.error(`Invalid REJECT_MESSAGES config, ignoring: ${raw}`),
+  );
 }
 
 export default {
@@ -173,19 +199,16 @@ export default {
     };
 
     if (spam) {
-      console.log(
-        JSON.stringify({
-          to: message.to,
-          from: headerFrom,
-          subject: email.subject,
-          senderIp,
-          dnsblResult,
-          scores,
-          score,
-          threshold,
-          verdict: "reject",
-        }),
-      );
+      logVerdict("reject", {
+        to: message.to,
+        from: headerFrom,
+        subject: email.subject,
+        senderIp,
+        dnsblResult,
+        scores,
+        score,
+        threshold,
+      });
       await recordStats("spam");
       const category = dominantCategory(scores, weights);
       const rejectMessages = parseRejectMessages(env.REJECT_MESSAGES);
@@ -213,19 +236,16 @@ export default {
       return;
     }
 
-    console.log(
-      JSON.stringify({
-        to: message.to,
-        from: headerFrom,
-        subject: email.subject,
-        senderIp,
-        dnsblResult,
-        scores,
-        score,
-        threshold,
-        verdict: "forward",
-      }),
-    );
+    logVerdict("forward", {
+      to: message.to,
+      from: headerFrom,
+      subject: email.subject,
+      senderIp,
+      dnsblResult,
+      scores,
+      score,
+      threshold,
+    });
     await recordStats("forwarded");
   },
 
