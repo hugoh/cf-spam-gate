@@ -23,9 +23,9 @@ jobs:
       statuses: write
     runs-on: ubuntu-latest
     steps:
-      - uses: hugoh/gh-workflows/setup@2be2abe062a87656771f823fcd8ccbe8dae9b149 # v1.9.0
+      - uses: hugoh/gh-workflows/setup@e3deb909891d6fc8089311f2e91e85796eb6c725 # v1.9.2
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - uses: hugoh/gh-workflows/hk-check@2be2abe062a87656771f823fcd8ccbe8dae9b149 # v1.9.0
+      - uses: hugoh/gh-workflows/hk-check@e3deb909891d6fc8089311f2e91e85796eb6c725 # v1.9.2
         env:
           PINACT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
