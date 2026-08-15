@@ -38,6 +38,12 @@ zone_name = "larve.net"
 [observability]
 enabled = true
 
+# Daily purge of stats buckets older than the configured retention (see
+# STATS_HOUR_RETENTION_DAYS / STATS_DAY_RETENTION_DAYS below). Kept out of the
+# email() hot path — the scheduled() handler calls StatsCounter.purgeExpired.
+[triggers]
+crons = ["0 3 * * *"]
+
 [vars]
 # Default spam-score threshold (0-1) when a recipient has no override in ROUTES.
 DEFAULT_THRESHOLD = "0.5"

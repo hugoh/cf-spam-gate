@@ -186,12 +186,7 @@ export default {
       if (!isStatsEnabled(env)) return;
       try {
         const stats = env.STATS.get(env.STATS.idFromName("stats"));
-        await stats.recordEvent(
-          scores,
-          outcome,
-          new Date().toISOString(),
-          statsRetention(env),
-        );
+        await stats.recordEvent(scores, outcome, new Date().toISOString());
       } catch (error) {
         // Stats collection is best-effort — never let it block mail delivery.
         console.error(`Failed to record stats: ${error}`);
@@ -277,5 +272,11 @@ export default {
     }
 
     return Response.json({ granularity, buckets });
+  },
+
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    if (!isStatsEnabled(env)) return;
+    const stats = env.STATS.get(env.STATS.idFromName("stats"));
+    await stats.purgeExpired(new Date().toISOString(), statsRetention(env));
   },
 };

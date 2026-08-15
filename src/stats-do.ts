@@ -73,12 +73,7 @@ export class StatsCounter extends DurableObject<unknown> {
     }
   }
 
-  recordEvent(
-    scores: Scores,
-    outcome: EventOutcome,
-    nowIso: string,
-    retentionDays: RetentionDays,
-  ): void {
+  recordEvent(scores: Scores, outcome: EventOutcome, nowIso: string): void {
     const firedSignals = SCORE_KEYS.filter(
       (key) => scores[key] >= SIGNAL_FIRE_THRESHOLD,
     );
@@ -116,7 +111,11 @@ export class StatsCounter extends DurableObject<unknown> {
         outcome === "failed" ? 1 : 0,
         JSON.stringify(signals),
       );
+    }
+  }
 
+  purgeExpired(nowIso: string, retentionDays: RetentionDays): void {
+    for (const granularity of ["hour", "day"] as const) {
       this.ctx.storage.sql.exec(
         "DELETE FROM buckets WHERE granularity = ? AND key < ?",
         granularity,
