@@ -6,7 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { parse as parseToml } from "smol-toml";
-import { isValidScores, SIGNAL_CATEGORIES } from "../src/scoring.ts";
+import { isValidScores, SIGNAL_CATEGORIES } from "../src/signals.ts";
 
 const LIST_VARS = [
   "SUSPICIOUS_TLDS",

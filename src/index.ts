@@ -1,32 +1,23 @@
 import PostalMime from "postal-mime";
 import {
-  attachmentScore,
   DEFAULT_DANGEROUS_EXTENSIONS,
   DEFAULT_MACRO_EXTENSIONS,
   DEFAULT_OOXML_ZIP_EXTENSIONS,
 } from "./attachment";
-import { parseAuthenticationResults } from "./auth";
-import { getClassifier } from "./classifier";
 import { checkDnsbl } from "./dnsbl";
-import { extractLinks } from "./links";
-import { piiScore } from "./pii";
 import { extractSenderIp } from "./received-header";
 import { lookupRoute } from "./routing";
+import { DEFAULT_SUSPICIOUS_TLDS, isSpam } from "./scoring";
 import {
-  authScore,
   combineScores,
-  contentScore,
+  computeScores,
   DEFAULT_SIGNAL_WEIGHTS,
-  DEFAULT_SUSPICIOUS_TLDS,
-  dnsblScore,
   dominantCategory,
-  headerScore,
-  isSpam,
   isValidScores,
   type Scores,
   type SignalCategory,
-  urlScore,
-} from "./scoring";
+  type SignalContext,
+} from "./signals";
 import { type EventOutcome, StatsCounter } from "./stats-do";
 import { renderStatsPage } from "./stats-page";
 
@@ -134,6 +125,7 @@ export default {
     }
 
     const headerFrom = email.from?.address ?? message.from;
+    const fromDomain = headerFrom.split("@")[1] ?? "";
 
     const topReceived = email.headers.find(
       (h) => h.key.toLowerCase() === "received",
@@ -141,17 +133,11 @@ export default {
     const senderIp = extractSenderIp(topReceived);
     const dnsblPromise = checkDnsbl(senderIp, env.SPAMHAUS_DQS_KEY);
 
-    const content = contentScore(
-      getClassifier(),
-      `${email.subject ?? ""}\n${email.text ?? email.html ?? ""}`,
-    );
-
-    const fromDomain = headerFrom.split("@")[1] ?? "";
-    const url = urlScore(extractLinks(email.html, email.text), fromDomain, {
+    const signalContext: SignalContext = {
+      email,
+      headerFrom,
+      fromDomain,
       suspiciousTlds: parseSet(env.SUSPICIOUS_TLDS, DEFAULT_SUSPICIOUS_TLDS),
-    });
-
-    const attachment = attachmentScore(email.attachments, {
       dangerousExtensions: parseSet(
         env.DANGEROUS_EXTENSIONS,
         DEFAULT_DANGEROUS_EXTENSIONS,
@@ -161,34 +147,10 @@ export default {
         env.OOXML_ZIP_EXTENSIONS,
         DEFAULT_OOXML_ZIP_EXTENSIONS,
       ),
-    });
-
-    const header = headerScore({
-      date: email.date,
-      from: headerFrom,
-      replyTo: email.replyTo?.[0]?.address,
-      subject: email.subject,
-    });
-
-    const dnsblResult = await dnsblPromise;
-    const dnsbl = dnsblScore(dnsblResult);
-
-    const pii = piiScore(email.text ?? "");
-
-    const authResultsHeader = email.headers.find(
-      (h) => h.key.toLowerCase() === "authentication-results",
-    )?.value;
-    const auth = authScore(parseAuthenticationResults(authResultsHeader));
-
-    const scores: Scores = {
-      content,
-      url,
-      header,
-      dnsbl,
-      attachment,
-      pii,
-      auth,
+      dnsblResult: dnsblPromise,
     };
+    const scores = await computeScores(signalContext);
+    const dnsblResult = await dnsblPromise;
     const weights = parseWeights(env.SIGNAL_WEIGHTS);
     const score = combineScores(scores, weights);
     const threshold = route.threshold ?? Number(env.DEFAULT_THRESHOLD);
