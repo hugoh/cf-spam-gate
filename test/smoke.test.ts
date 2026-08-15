@@ -196,7 +196,6 @@ describe("smoke test", () => {
       expect.objectContaining({ content: expect.any(Number) }),
       "failed",
       expect.any(String),
-      { hour: 30, day: 400 },
     );
 
     logSpy.mockRestore();
@@ -253,7 +252,6 @@ describe("smoke test", () => {
       expect.objectContaining({ content: expect.any(Number) }),
       "failed",
       expect.any(String),
-      { hour: 30, day: 400 },
     );
 
     logSpy.mockRestore();
@@ -303,7 +301,6 @@ describe("smoke test", () => {
       expect.objectContaining({ content: expect.any(Number) }),
       "forwarded",
       expect.any(String),
-      { hour: 30, day: 400 },
     );
 
     logSpy.mockRestore();
@@ -418,7 +415,6 @@ describe("smoke test", () => {
       expect.objectContaining({ content: expect.any(Number) }),
       "forwarded",
       expect.any(String),
-      { hour: 30, day: 400 },
     );
 
     const expectedJson = {

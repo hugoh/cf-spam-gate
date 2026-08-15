@@ -5,8 +5,6 @@ import type { StatsCounter } from "../src/stats-do";
 
 const env = rawEnv as unknown as Required<Pick<Env, "STATS">>;
 
-const RETENTION = { hour: 30, day: 400 };
-
 const ZERO_SCORES = {
   content: 0,
   url: 0,
@@ -31,7 +29,6 @@ describe("StatsCounter", () => {
         ZERO_SCORES,
         "forwarded",
         "2026-08-14T09:30:00.000Z",
-        RETENTION,
       );
 
       expect(instance.getStats("hour", 10)).toEqual([
@@ -61,24 +58,13 @@ describe("StatsCounter", () => {
     const object = stub();
     await runInDurableObject(object, async (raw) => {
       const instance = raw as unknown as StatsCounter;
-      instance.recordEvent(
-        ZERO_SCORES,
-        "spam",
-        "2026-08-14T09:05:00.000Z",
-        RETENTION,
-      );
+      instance.recordEvent(ZERO_SCORES, "spam", "2026-08-14T09:05:00.000Z");
       instance.recordEvent(
         ZERO_SCORES,
         "forwarded",
         "2026-08-14T09:55:00.000Z",
-        RETENTION,
       );
-      instance.recordEvent(
-        ZERO_SCORES,
-        "failed",
-        "2026-08-14T09:56:00.000Z",
-        RETENTION,
-      );
+      instance.recordEvent(ZERO_SCORES, "failed", "2026-08-14T09:56:00.000Z");
 
       expect(instance.getStats("hour", 10)).toEqual([
         {
@@ -101,13 +87,11 @@ describe("StatsCounter", () => {
         ZERO_SCORES,
         "forwarded",
         "2026-08-14T09:00:00.000Z",
-        RETENTION,
       );
       instance.recordEvent(
         ZERO_SCORES,
         "forwarded",
         "2026-08-14T10:00:00.000Z",
-        RETENTION,
       );
 
       const hourly = instance.getStats("hour", 10);
@@ -136,13 +120,11 @@ describe("StatsCounter", () => {
         { ...ZERO_SCORES, content: 0.9, url: 0.4 },
         "spam",
         "2026-08-14T09:00:00.000Z",
-        RETENTION,
       );
       instance.recordEvent(
         { ...ZERO_SCORES, content: 0.6, dnsbl: 1 },
         "spam",
         "2026-08-14T09:10:00.000Z",
-        RETENTION,
       );
 
       expect(instance.getStats("hour", 10)[0].signals).toEqual({
@@ -152,7 +134,7 @@ describe("StatsCounter", () => {
     });
   });
 
-  it("prunes buckets older than the configured retention", async () => {
+  it("does not prune on recordEvent", async () => {
     const object = stub();
     await runInDurableObject(object, async (raw) => {
       const instance = raw as unknown as StatsCounter;
@@ -160,14 +142,40 @@ describe("StatsCounter", () => {
         ZERO_SCORES,
         "forwarded",
         "2026-01-01T00:00:00.000Z",
-        { hour: 1, day: 1 },
       );
       instance.recordEvent(
         ZERO_SCORES,
         "forwarded",
         "2026-01-05T00:00:00.000Z",
-        { hour: 1, day: 1 },
       );
+
+      expect(instance.getStats("hour", 10).map((b) => b.key)).toEqual([
+        "2026-01-05T00",
+        "2026-01-01T00",
+      ]);
+      expect(instance.getStats("day", 10).map((b) => b.key)).toEqual([
+        "2026-01-05",
+        "2026-01-01",
+      ]);
+    });
+  });
+
+  it("purgeExpired removes buckets older than the configured retention", async () => {
+    const object = stub();
+    await runInDurableObject(object, async (raw) => {
+      const instance = raw as unknown as StatsCounter;
+      instance.recordEvent(
+        ZERO_SCORES,
+        "forwarded",
+        "2026-01-01T00:00:00.000Z",
+      );
+      instance.recordEvent(
+        ZERO_SCORES,
+        "forwarded",
+        "2026-01-05T00:00:00.000Z",
+      );
+
+      instance.purgeExpired("2026-01-05T00:00:00.000Z", { hour: 1, day: 1 });
 
       expect(instance.getStats("hour", 10).map((b) => b.key)).toEqual([
         "2026-01-05T00",
