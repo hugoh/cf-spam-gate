@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "bun run typecheck && bun run validate-config",
     "deploy": "bun run validate-config && wrangler deploy",
     "validate-config": "bun run scripts/validate-config.mjs",
     "test": "vitest run",
