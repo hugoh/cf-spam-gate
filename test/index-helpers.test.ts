@@ -9,7 +9,8 @@ import {
 import { DEFAULT_SIGNAL_WEIGHTS } from "../src/signals";
 
 describe("parseJsonEnvVar", () => {
-  const isString = (value: unknown): value is string => typeof value === "string";
+  const isString = (value: unknown): value is string =>
+    typeof value === "string";
 
   it("returns the fallback when the env var is undefined", () => {
     expect(parseJsonEnvVar(undefined, isString, "fallback")).toBe("fallback");
@@ -24,9 +25,7 @@ describe("parseJsonEnvVar", () => {
   });
 
   it("returns the fallback when the JSON is malformed", () => {
-    expect(parseJsonEnvVar("{not json", isString, "fallback")).toBe(
-      "fallback",
-    );
+    expect(parseJsonEnvVar("{not json", isString, "fallback")).toBe("fallback");
   });
 
   it("returns the fallback when the parsed value fails validation", () => {

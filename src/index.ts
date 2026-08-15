@@ -120,7 +120,9 @@ export function parseSet(
 /** Parses SIGNAL_WEIGHTS, falling back to the built-in defaults (and logging) when malformed. */
 export function parseWeights(json: string): Scores {
   return parseJsonEnvVar(json, isValidScores, DEFAULT_SIGNAL_WEIGHTS, (raw) =>
-    console.error(`Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${raw}`),
+    console.error(
+      `Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${raw}`,
+    ),
   );
 }
 
