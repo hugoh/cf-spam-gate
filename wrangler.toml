@@ -1,6 +1,6 @@
 name = "cf-spam-gate"
 main = "src/index.ts"
-compatibility_date = "2025-01-10"
+compatibility_date = "2026-08-04"
 
 # ROUTES maps a protected recipient address to its real forwarding
 # destination(s) and an optional per-recipient spam-threshold override.
