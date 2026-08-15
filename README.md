@@ -41,8 +41,7 @@ Use the
 OpenTofu module instead of a plain forwarding rule. It creates **both** the
 routing rule and the recipient's `ROUTES` KV entry (step 2 above) — so for any
 address managed this way, you don't need the manual `wrangler kv` command
-separately; the module is the source of truth. It's also published on the
-[OpenTofu Registry](https://registry.opentofu.org).
+separately; the module is the source of truth.
 
 ```hcl
 resource "cloudflare_email_routing_settings" "example" {
