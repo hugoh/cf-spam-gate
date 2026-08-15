@@ -59,7 +59,7 @@ function statsRetention(env: Env) {
   };
 }
 
-function logVerdict(
+export function logVerdict(
   verdict: "reject" | "forward",
   fields: {
     to: string;
@@ -76,7 +76,7 @@ function logVerdict(
 }
 
 /** Parses an optional JSON env var, falling back to `fallback` (and logging via `onInvalid` when given) when unset or malformed. Deploy-time validation (`scripts/validate-config.mjs`) should catch bad config first — this is defense in depth so a bad config degrades gracefully instead of failing every email. */
-function parseJsonEnvVar<T>(
+export function parseJsonEnvVar<T>(
   json: string | undefined,
   validate: (parsed: unknown) => parsed is T,
   fallback: T,
@@ -109,7 +109,7 @@ function isStringRecord(
 }
 
 /** Parses an optional JSON-array env var into a Set, falling back to `fallback` when unset or malformed. */
-function parseSet(
+export function parseSet(
   json: string | undefined,
   fallback: Set<string>,
 ): Set<string> {
@@ -118,14 +118,14 @@ function parseSet(
 }
 
 /** Parses SIGNAL_WEIGHTS, falling back to the built-in defaults (and logging) when malformed. */
-function parseWeights(json: string): Scores {
+export function parseWeights(json: string): Scores {
   return parseJsonEnvVar(json, isValidScores, DEFAULT_SIGNAL_WEIGHTS, (raw) =>
     console.error(`Invalid SIGNAL_WEIGHTS config, falling back to defaults: ${raw}`),
   );
 }
 
 /** Parses REJECT_MESSAGES, falling back to an empty map (and logging) when malformed. */
-function parseRejectMessages(
+export function parseRejectMessages(
   json: string | undefined,
 ): Partial<Record<SignalCategory, string>> {
   return parseJsonEnvVar(json, isStringRecord, {}, (raw) =>
