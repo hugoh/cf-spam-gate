@@ -50,7 +50,7 @@ export const SIGNALS = [
   {
     key: "content",
     category: "content",
-    defaultWeight: 0.3,
+    defaultWeight: 0.2,
     compute: (ctx) =>
       contentScore(
         getClassifier(),
@@ -81,7 +81,7 @@ export const SIGNALS = [
   {
     key: "dnsbl",
     category: "reputation",
-    defaultWeight: 0.1,
+    defaultWeight: 0.3,
     compute: async (ctx) => dnsblScore(await ctx.dnsblResult),
   },
   {
