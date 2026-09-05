@@ -22,7 +22,7 @@ jobs:
       statuses: write
     runs-on: ubuntu-latest
     steps:
-      - uses: hugoh/gh-workflows/setup@b1fb42d4c93e059b994709856e2a9336329b86bd # v1.16.0
+      - uses: hugoh/gh-workflows/setup@28f7564f9a9a3dff88d6b34e1fd2e1e21e9dc216 # v1.17.1
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
@@ -30,6 +30,6 @@ jobs:
           restore-keys: ${{ runner.os }}-bun-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - uses: hugoh/gh-workflows/hk-check@b1fb42d4c93e059b994709856e2a9336329b86bd # v1.16.0
+      - uses: hugoh/gh-workflows/hk-check@28f7564f9a9a3dff88d6b34e1fd2e1e21e9dc216 # v1.17.1
         env:
           PINACT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
