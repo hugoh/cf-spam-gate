@@ -11,6 +11,6 @@ permissions:
 
 jobs:
   release:
-    uses: hugoh/gh-workflows/.github/workflows/release.yml@bb265ccce6562fcb1ad4ae85a4aacc72de332652 # v1.20.0
+    uses: hugoh/gh-workflows/.github/workflows/release.yml@1d2a18056f2122b7f49c2e8aacb48c40cb6eaab9 # v1.24.0
     permissions:
       contents: write
