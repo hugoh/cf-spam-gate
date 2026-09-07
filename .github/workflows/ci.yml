@@ -20,25 +20,20 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hugoh/gh-workflows/setup@291292b5f57986fd54e50e357158446ea960d47e # v1.34.0
         with:
-          persist-credentials: false
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
+          extra-cache-key-cmd: cat package-lock.json
+          extra-cache-paths: ~/.npm
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm ci
       - name: Typecheck
-        run: bun run typecheck
+        run: npm run typecheck
       - name: Test
-        run: bun run test
+        run: npm run test
       - name: Validate wrangler.toml config
-        run: bun run validate-config
+        run: npm run validate-config
       - name: Verify the worker still bundles (catches Workers-runtime-incompatible deps)
-        run: bunx wrangler deploy --dry-run --outdir=dist
+        run: npx wrangler deploy --dry-run --outdir=dist
 
   deploy:
     # Disabled for now — not yet decided whether deploys should be automatic.
@@ -54,19 +49,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hugoh/gh-workflows/setup@291292b5f57986fd54e50e357158446ea960d47e # v1.34.0
         with:
-          persist-credentials: false
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
+          extra-cache-key-cmd: cat package-lock.json
+          extra-cache-paths: ~/.npm
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm ci
       - name: Deploy
-        run: bunx wrangler deploy
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

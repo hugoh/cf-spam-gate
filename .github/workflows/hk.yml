@@ -17,4 +17,4 @@ jobs:
       packages: read
       statuses: write
     with:
-      pre-hk: bun install --frozen-lockfile
+      pre-hk: npm ci

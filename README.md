@@ -9,12 +9,12 @@ Runs entirely on Cloudflare's free tier: a single Worker plus a KV namespace, no
 ### 1. Deploy the worker
 
 ```sh
-bun install
-bunx wrangler kv namespace create ROUTES   # create the KV namespace, then paste its id into wrangler.toml
-bun run deploy                             # validates wrangler.toml (e.g. SIGNAL_WEIGHTS), then wrangler deploy
+npm ci
+npx wrangler kv namespace create ROUTES   # create the KV namespace, then paste its id into wrangler.toml
+npm run deploy                             # validates wrangler.toml (e.g. SIGNAL_WEIGHTS), then wrangler deploy
 ```
 
-In production, deployment is automated: pushing to `main` runs the test suite (which includes `bun run validate-config`, catching a malformed `SIGNAL_WEIGHTS` or detection-list override before it ever ships) and, if it passes, `wrangler deploy` (see `.github/workflows/ci.yml`). That workflow needs two repo secrets: `CLOUDFLARE_API_TOKEN` (a token scoped to edit Workers, KV, and Email Routing) and `CLOUDFLARE_ACCOUNT_ID`.
+In production, deployment is automated: pushing to `main` runs the test suite (which includes `npm run validate-config`, catching a malformed `SIGNAL_WEIGHTS` or detection-list override before it ever ships) and, if it passes, `wrangler deploy` (see `.github/workflows/ci.yml`). That workflow needs two repo secrets: `CLOUDFLARE_API_TOKEN` (a token scoped to edit Workers, KV, and Email Routing) and `CLOUDFLARE_ACCOUNT_ID`.
 
 ### 2. Protect an address
 
@@ -25,7 +25,7 @@ OpenTofu module (step 3), it creates this entry for you — skip ahead. This
 manual form is for quick testing, or for addresses managed some other way:
 
 ```sh
-bunx wrangler kv key put --binding=ROUTES "you@example.com" \
+npx wrangler kv key put --binding=ROUTES "you@example.com" \
   '{"destinations": ["you@your-real-inbox.example"], "threshold": 0.5}'
 ```
 
@@ -62,7 +62,7 @@ module "spam_gate_contact" {
 ```
 
 Run with `tofu` (OpenTofu), not `terraform`. It's a separate repo from this
-Worker on purpose — different tooling (pure OpenTofu vs. TypeScript/bun) and
+Worker on purpose — different tooling (pure OpenTofu vs. TypeScript/npm) and
 its own independent release stream, so a Worker release never implies a
 module release or vice versa.
 
@@ -88,12 +88,12 @@ dependency.
 | `SUSPICIOUS_TLDS`, `DANGEROUS_EXTENSIONS`, `MACRO_EXTENSIONS`, `OOXML_ZIP_EXTENSIONS` | Optional JSON-array overrides for the built-in detection lists (commented out in `wrangler.toml` with their defaults shown); each falls back to a sane default when unset or malformed. |
 | `STATS_ENABLED`, `STATS_HOUR_RETENTION_DAYS`, `STATS_DAY_RETENTION_DAYS` | Optional usage-stats collection — see [step 5](#5-usage-stats-optional). |
 
-`bun run deploy` (and CI) run `bun run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the seven expected keys as non-negative numbers, that any of the four list overrides above are JSON arrays of strings, and that `STATS_ENABLED`/`STATS_HOUR_RETENTION_DAYS`/`STATS_DAY_RETENTION_DAYS` (if set) are well-formed — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
+`npm run deploy` (and CI) run `npm run validate-config` first (`scripts/validate-config.mjs`), which checks `SIGNAL_WEIGHTS` has exactly the seven expected keys as non-negative numbers, that any of the four list overrides above are JSON arrays of strings, and that `STATS_ENABLED`/`STATS_HOUR_RETENTION_DAYS`/`STATS_DAY_RETENTION_DAYS` (if set) are well-formed — catching a config typo at deploy time instead of at the next incoming email. As defense in depth, `SIGNAL_WEIGHTS` is also re-validated inside `email()` itself: a bad value there falls back to the built-in defaults and logs a warning rather than making every email fail.
 
 Optionally enable the DNSBL signal by setting a free [Spamhaus DQS](https://www.spamhaus.org/free-trial/sign-up-for-a-free-data-query-service-account/) key:
 
 ```sh
-bunx wrangler secret put SPAMHAUS_DQS_KEY
+npx wrangler secret put SPAMHAUS_DQS_KEY
 ```
 
 Without a key, that signal is simply skipped (scored neutral, not "spam") — nothing breaks.
@@ -137,7 +137,7 @@ multiple DO instances to hold up under high-throughput deployments.
 Manual only — there's no scheduled retrain workflow. The training corpus (Enron-Spam) is a fixed historical dataset that isn't updated upstream, so retraining on a timer would just reproduce the same model every time. Retrain when you change `scripts/train-model.config.mjs` (corpus URL, vocabulary size, or the stopword list) or want to pick up an update to the corpus source itself:
 
 ```sh
-bun run train-model
+npm run train-model
 ```
 
 Takes a few seconds — training itself is fast; most of the time is the ~15MB corpus download. Writes both `data/model.json` (the bundled model) and `data/model.meta.json` (when it was trained, from what corpus, with what settings — see `scripts/train-model.mjs`'s `buildMeta`).
@@ -145,12 +145,10 @@ Takes a few seconds — training itself is fast; most of the time is the ~15MB c
 ### Local development
 
 ```sh
-bun run test        # unit tests (vitest, Workers runtime pool)
-bun run typecheck
-bunx wrangler dev    # local dev server against a real KV binding
+npm run test        # unit tests (vitest, Workers runtime pool)
+npm run typecheck
+npx wrangler dev    # local dev server against a real KV binding
 ```
-
-> **Use `bun run test`, not bare `bun test`.** Bun ships its own built-in test runner that auto-discovers `*.test.ts` files by naming convention, and bare `bun test` will grab them with its own incomplete Jest/Vitest-compatible shim instead of vitest — missing APIs like `vi.stubGlobal`, and no `workerd` runtime, so tests requiring Workers bindings fail outright. `bun run test` explicitly invokes the real `vitest run` from `package.json`'s script and is what CI runs.
 
 ## How it works
 
