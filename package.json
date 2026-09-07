@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "bun run validate-config && wrangler deploy",
-    "validate-config": "bun run scripts/validate-config.mjs",
+    "deploy": "npm run validate-config && wrangler deploy",
+    "validate-config": "tsx scripts/validate-config.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "train-model": "node scripts/train-model.mjs"
@@ -29,6 +29,7 @@
     "cli-progress": "3.12.0",
     "csv-parse": "7.0.2",
     "smol-toml": "1.8.0",
+    "tsx": "4.23.13",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
     "wrangler": "4.128.0"

@@ -18,12 +18,12 @@ local linters = new Mapping<String, Step> {
     ["typos"] = (Base.base["typos"]) {
         exclude = List("data/model.json")
     }
-    // Run via bun (the project's own typescript devDependency) rather than
+    // Run via the project's own typescript devDependency rather than
     // Builtins.tsc's mise-managed global tsc — one fewer place to keep the
     // TypeScript version in sync.
     ["tsc"] = {
         glob = List("**/*.ts")
-        check = "bun run typecheck"
+        check = "npm run typecheck"
     }
 }
 

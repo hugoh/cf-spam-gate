@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S npx tsx
 /**
  * Validates the [vars] block of wrangler.toml before deploy — catches a
  * malformed SIGNAL_WEIGHTS (or one of the optional detection-list overrides)
