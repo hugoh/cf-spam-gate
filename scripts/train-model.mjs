@@ -129,7 +129,7 @@ export function buildMeta({
   };
 }
 
-async function fetchCorpus(url, cliProgress) {
+async function fetchCorpus(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(
@@ -137,29 +137,7 @@ async function fetchCorpus(url, cliProgress) {
     );
   }
 
-  const totalBytes = Number(response.headers.get("content-length") ?? 0);
-  const downloadBar = new cliProgress.SingleBar(
-    { format: "downloading |{bar}| {percentage}% | {value}/{total} bytes" },
-    cliProgress.Presets.shades_classic,
-  );
-  downloadBar.start(totalBytes || 1, 0);
-
-  const chunks = [];
-  let received = 0;
-  for await (const chunk of response.body) {
-    chunks.push(chunk);
-    received += chunk.length;
-    downloadBar.update(totalBytes ? received : downloadBar.getTotal());
-  }
-  downloadBar.stop();
-
-  const bytes = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-
+  const bytes = new Uint8Array(await response.arrayBuffer());
   const unzipped = unzipSync(bytes);
   const csvEntry = Object.keys(unzipped).find((name) => name.endsWith(".csv"));
   if (!csvEntry) {
@@ -173,7 +151,7 @@ async function main() {
   const { default: cliProgress } = await import("cli-progress");
 
   console.log(`fetching training corpus from ${CORPUS_URL}`);
-  const { rows, bytes } = await fetchCorpus(CORPUS_URL, cliProgress);
+  const { rows, bytes } = await fetchCorpus(CORPUS_URL);
   if (rows.length === 0) {
     throw new Error(
       "training corpus was empty after parsing — check CORPUS_URL / format",
