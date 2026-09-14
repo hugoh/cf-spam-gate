@@ -100,7 +100,7 @@ export function urlScore(
       if (anchorDomain && parsed.domain && anchorDomain !== parsed.domain)
         score += 0.4;
     } catch {
-      score += 0.2; // unparseable "link" is itself a bad sign
+      score += 0.2; // unparsable "link" is itself a bad sign
     }
     return Math.min(score, 1);
   });

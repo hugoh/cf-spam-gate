@@ -1,0 +1,4 @@
+[default.extend-words]
+# Enron Capital & Trade — the corpus's real internal routing code, not a
+# typo of "etc"
+ect = "ect"
