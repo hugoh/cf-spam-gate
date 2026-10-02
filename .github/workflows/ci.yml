@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: hugoh/gh-workflows/setup@291292b5f57986fd54e50e357158446ea960d47e # v1.34.0
+      - uses: hugoh/gh-workflows/setup@fc872ebc6ac6bb28fa73a2e83f9f354faad9b5b7 # v1.40.6
         with:
           extra-cache-key-cmd: cat package-lock.json
           extra-cache-paths: ~/.npm
@@ -49,7 +49,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: hugoh/gh-workflows/setup@291292b5f57986fd54e50e357158446ea960d47e # v1.34.0
+      - uses: hugoh/gh-workflows/setup@fc872ebc6ac6bb28fa73a2e83f9f354faad9b5b7 # v1.40.6
         with:
           extra-cache-key-cmd: cat package-lock.json
           extra-cache-paths: ~/.npm
