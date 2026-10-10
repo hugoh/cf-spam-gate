@@ -25,13 +25,13 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
-    "@cloudflare/workers-types": "5.20260925.2",
+    "@cloudflare/workers-types": "5.20261003.1",
     "cli-progress": "3.12.0",
     "csv-parse": "7.0.3",
     "smol-toml": "1.9.0",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
-    "wrangler": "4.140.0"
+    "wrangler": "4.147.0"
   }
 }
